@@ -65,7 +65,7 @@ def start():
 
     
 def gamfun(gam=.6, plot=False, boundfrac=.1):
-    runfile = 'gam%s_bound%s//'%(int(gam*100),int(boundfrac*100))
+    runfile = 'gam%s_bound%s//'%(int(gam*1000),int(boundfrac*1000))
     if not os.path.exists('%s%s'%(PATH,runfile)):
         os.makedirs('%s%s'%(PATH,runfile))
     try:
@@ -233,11 +233,12 @@ def makeshadows(image,runfile):
     fimage = watershedmethod(image)
     #have to explicitly pass the mask on from the input image
     fimage = npma.masked_array(fimage)
+    fimage.dump('%s%s%s_flagged.npy'%(PATH, runfile,FNM))
     fimage.mask = image.mask
     fmax = np.max(fimage)
     #shadows = []
     shade=None
-    for i in range(fmax):
+    for i in range(fmax+1):
         pixels = np.argwhere(fimage == i)
         #must be converted to list for the neighbor-checking function to work
         pixels = pixels.tolist()
@@ -351,10 +352,14 @@ class shadow(object):
         self.measured = None
         self.sunpoint = [None,None]
         self.bouldwid = None
+        self.bouldwid_m = None
         self.ellipselen = None
+        self.ellipselen_m = None
         self.bouldheight = None
+        self.bouldheight_m = None
         self.bouldcent = [None, None]
         self.shadlen = None
+        self.shadlen_m = None
         #placeholder for the patch object
         self.ellipsepatch = None
 
@@ -540,12 +545,28 @@ class shadow(object):
         self.measured = True
     def shadowmeasure_m(self):
         '''shadow measuring now that we are doubling the shadow, very straightforward'''
-        factor = np.cos(self.fitbeta[4])
-        self.bouldwid = 2*abs(factor*self.fitbeta[3])
-        self.shadlen = abs(factor*self.fitbeta[1])
-        self.bouldcent = [self.fitbeta[0],self.fitbeta[2]]
-        self.bouldheight = self.shadlen/np.tan(self.inangle)
-        self.measured = True
+        #despite not being constrained, the fit ellipses are pretty much either veritcal or horizonal
+        # so np.cos(alpha) is essentially either 0,1, or -1, or at least close to it. With this
+        #non-zero results (~1 or -1) will be negative, others will be positive
+        test = .5 - abs(np.cos(self.fitbeta[4]))
+        
+        if test <= 0:
+            factor = np.cos(self.fitbeta[4])
+            self.bouldwid = 2*abs(factor*self.fitbeta[3])
+            self.shadlen = abs(factor*self.fitbeta[1])
+            self.bouldcent = [self.fitbeta[0],self.fitbeta[2]]
+            self.bouldheight = self.shadlen/np.tan(self.inangle)
+            self.measured = True
+        if test > 0:
+            factor = np.sin(self.fitbeta[4])
+            self.bouldwid = 2*abs(factor*self.fitbeta[1])
+            self.shadlen = abs(factor*self.fitbeta[3])
+            self.bouldcent = [self.fitbeta[0],self.fitbeta[2]]
+            self.bouldheight = self.shadlen/np.tan(self.inangle)
+            self.measured = True
+        self.bouldwid_m = self.bouldwid*self.resolution
+        self.shadlen_m = self.shadlen*self.resolution
+        self.bouldheight_m = self.bouldheight*self.resolution
         return
         
     def ellipse (self, beta, coords):
@@ -603,13 +624,14 @@ def current():
     print 'Current Filename is: %s'%(FNM)
     print 'current Product ID is: %s'%(ID)
     return
-def getshads(runfile, num):
+def getshads(runfile, num, silenced = True):
     #open and prep a shadow file, returns open file object and endpoint
     #current()
     try:
         load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num), 'rb')
     except IOError:
-        print "No shadow file exists"
+        if not silenced:
+            print "No shadow file exists"
         return None
     return load
 def GISprep(runfile,mod):
@@ -619,7 +641,7 @@ def GISprep(runfile,mod):
     shutil.copyfile('%s%s.PGw'%(PATH,FNM),'%s%s%s_%s.PGw'%(PATH,runfile,FNM,mod))
     shutil.copyfile('%s%s.PNG.aux.xml'%(PATH,FNM),'%s%s%s_%s.PNG.aux.xml'%(PATH,runfile,FNM,mod))
     shutil.copyfile('%s%s.PNG.ovr'%(PATH,FNM),'%s%s%s_%s.PNG.ovr'%(PATH,runfile,FNM,mod))
-def bulkCFA(runfile,maxnum,root):
+def bulkCFA(runfile,maxnum,maxd,root):
     ''' runs the CFA protocol on a bunch of files and gives an average
 '''
     while True:
@@ -643,16 +665,18 @@ def bulkCFA(runfile,maxnum,root):
             #acuire all the CFA data, this will come in the form:
             #CFA[0] = actual CFA data
             #CFA[1] = bins for CFA data, same for all
-            dat = CFA(runfile,i)
+            dat = CFA(runfile,i, maxd)
             if any(dat):
                 plt.plot(dat[1],dat[0],'b-',alpha=.05)
                 CFAs+=[dat]
+##    if not any(CFAs):
+##        return None, None
     bins = CFAs[0][1]
     CFAs = np.array(CFAs)
     CFAs = CFAs[:,0]
     T_CFAs = np.transpose(CFAs)
     avgCFAs = map(np.average,T_CFAs)
-    fit_k = fittoRA(bins,avgCFAs)
+    fit_k, fit_r2 = fittoRA(bins,avgCFAs, [1.5,maxd])
     fit_bins = np.linspace(min(bins),max(bins),100)
     fitRA = GolomPSDCFA(fit_bins,fit_k)
     plt.plot(fit_bins,fitRA,'k-')
@@ -665,9 +689,9 @@ def bulkCFA(runfile,maxnum,root):
     plt.title('CFA for image %s at parameters %s'%(root,runfile))
     plt.savefig('%s%sCFAPlot.png'%(PATH,runfile))
     #plt.show()
-    return fit_k
+    return fit_k, fit_r2
     
-def CFA(runfile,num):
+def CFA(runfile,num,maxd):
     #Produces data for Cumulative Fractional Area, saves and produces plot
     #plt.show must be called after to plot all the data
     load = getshads(runfile,num)
@@ -680,7 +704,7 @@ def CFA(runfile,num):
         except EOFError:
             break
         if dat.measured:
-            sizes+=[dat.bouldwid]
+            sizes+=[dat.bouldwid_m]
             #this is not great, as it is assigned a bunch, but I dont know how to do it just once smoothly
             res = dat.resolution
     if not any(sizes):
@@ -692,8 +716,10 @@ def CFA(runfile,num):
     im_area = float(len(im.compressed()))*res*res
     #print area
     sizes = np.asarray(sizes)
-    sizes = sizes*res
-    bins = np.linspace(0,10,41)
+    #sizes = sizes*res
+    sizes = [x for x in sizes if x < maxd]
+    sizes = np.asarray(sizes)
+    bins = np.linspace(0,maxd,10*maxd+1)
     SFD, binsconf = np.histogram(sizes, bins=bins)
     #SFD = np.append(SFD,0)
     SFD = SFD/im_area
@@ -725,14 +751,25 @@ def CFA(runfile,num):
 def plotCFArefs():
     ''' plots data from golombek 2008 for comparison, user controlled which one
 '''
-    query = 'Plot: 1= just reference 2= just TRA_000828_2495 5=both\n'
+    query = 'Plot: 1= just reference \n 2= just TRA_000828_2495 \n 3=Sholes PSP_007718_2350 Hand Counts \n 5=all\n'
     option = int(raw_input(query))
     if option == 1 or option == 5:
-        dat = np.loadtxt('%sGolomRefCFACurves.csv'%(REFPATH),delimiter=',')
-        plt.plot(dat[0],dat[1],'m*',alpha=.7)
+        #dat = np.loadtxt('%sGolomRefCFACurves.csv'%(REFPATH),delimiter=',')
+        xs = np.linspace(.1,5)
+        y20 = GolomPSDCFA(xs,.2)
+        y30 = GolomPSDCFA(xs,.3)
+        y40 = GolomPSDCFA(xs,.4)
+        y50 = GolomPSDCFA(xs,.5)
+        x = np.tile(xs,4)
+        y = np.concatenate((y20,y30,y40,y50))
+        plt.plot(x,y,'m*',alpha=.7)
     if option == 2 or option == 5:
-        dat = np.loadtxt('%sGolomCFADat_TRA_000828_2495.csv'%(REFPATH),delimiter=',')
-        plt.plot(dat[0],dat[1],'k*',alpha=.7)
+        print 'cannot do until data is provided'
+        #dat = np.loadtxt('%sGolomCFADat_TRA_000828_2495.csv'%(REFPATH),delimiter=',')
+        #plt.plot(dat[0],dat[1],'k*',alpha=.7)
+    if option == 3 or option == 5:
+        dat = np.loadtxt('%sPSP_007718_2350Ref.csv'%(REFPATH),delimiter=',')
+        plt.plot(dat[0],dat[1],'b*')
     return
     
 def PSD(k):
@@ -742,6 +779,7 @@ def PSD(k):
     t = 3
     p = .79
     return sp.special.binom(t+k-1,k)*(p**k)*(1-p)**t
+
 def GolomPSDCFA(D,k):
     ''' The Model curves used in Golombek's 2012 work, similar to those used in Li 2018
     k is fractional area covered by rocks
@@ -763,7 +801,12 @@ def fittoRA(xdat,ydat,RNG = [1.5,2.25]):
             fit_ydat+=[ydat[i]]
     popt,pcov = sp.optimize.curve_fit(GolomPSDCFA,fit_xdat,fit_ydat,p0=[.1])
     #calculate the R2 on the fit maybe??
-    return popt
+    ybar = np.average(fit_ydat)
+    SStot = np.sum((fit_ydat-ybar)**2)
+    predicted = GolomPSDCFA(fit_xdat,popt)
+    SSres = np.sum((fit_ydat-predicted)**2)
+    R2 = 1-SSres/SStot
+    return popt, R2
 
 def checkbads(runfile,num):
     #this is for when you want to get all the shadows that went awry and plot them
@@ -789,8 +832,6 @@ def checkbads(runfile,num):
     plt.show()
     return bads
     
-    
-    
 def exportdata(runfile,num):
     #this takes a shadow file and converts it to a csv file with all its data
     load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num),'rb')
@@ -805,13 +846,14 @@ def exportdata(runfile,num):
     for item in attributes:
         datfile.write('%s\n'%item)
     datfile.close()
-    return attributes
     #np.savetxt('%s%s%s_data.csv'%(PATH,FNM,num),attributes, delimiter="'")
+    return attributes
+    
 def ExamineImage(runfile,num):
     try:
         att = exportdata(runfile,num)
     except(IOError):
-        print 'no shadows in image %s'%(num)
+        #print 'no shadows in image %s'%(num)
         return
     load = getshads(runfile,num)
     #nned two so you dont reuse same artist, silly but necessary
@@ -839,7 +881,73 @@ def ExamineImage(runfile,num):
     return
         
         
+def FindBigs(runfile,num,diam = 3):
+    '''code to find and identify large boulders thay may be causing issues in the CFA'''
+    shads = []
+    load = getshads(runfile,num)
+    if load == None:
+        return None
+    while True:
+        try:
+            dat = pickle.load(load)
+            shads+=[dat]
+        except(EOFError):
+            break
+    bigs = []
+    patches = []
+    total = 0
+    for i in shads:
+        if i.bouldwid_m>diam:
+            bigs+=[i]
+            patches+= i.patchplot()
+        if i.measured:
+            total+=1
+    if np.any(bigs) == False:
+        return None
+    tossout = float(len(bigs)/total)
+    image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+    fig,ax = plt.subplots(1,2, sharex = True, sharey = True)
+    ax[0].imshow(image,cmap='binary_r',interpolation='none')
+    ax[1].imshow(image,cmap='binary_r',interpolation='none')
+    for j in patches:
+        ax[1].add_patch(j)
+    return bigs
+def FindExcluded(runfile,maxnum,maxdiam):
+    '''finds how many boulders were ignored due to exclusion of large boulders'''
+    total = long(0)
+    used = long(0)
+    for i in range(maxnum):
+        shads = []
+        load = getshads(runfile,i)
+        if load == None:
+            continue
+        while True:
+            try:
+                dat = pickle.load(load)
+                shads+=[dat]
+            except(EOFError):
+                break
+        for j in shads:
+            if j.measured:
+                total+=1
+                if j.bouldwid_m<maxdiam:
+                    used+=1
+    exclpercent = 100.*(float(total-used)/float(total))
+    print ('%s boulders found in image, %s percent ignored due to diameter'%(total,exclpercent))
+    return
     
+
+def LROCAdapter():
+    '''this code is  intended as a quick fix to looking at LROC images, longer term
+better infrastructure should be put in place to make this smoother'''
+    #the only real problem is reaching for the metadata, we have to shortcut this
+    #these are called when MBARS initializes and with MBARS.start, so we can call this instead and it shoudl work
+    
+    INANGLE = None
+    NAZ = None
+    SAZ = None
+    SUNANGLE = None
+    RESOLUTION = None
     
 ##def MoransI(runfile,num):
 ##    '''Currently broken due to problems with PySAL'''

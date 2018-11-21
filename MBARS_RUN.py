@@ -8,12 +8,12 @@ import cPickle as pickle
 set number of images, this is expecting a series of images with the same root name
 and numerals at the end, i.e. "root0.PNG" and "root23.PNG"
 '''
-##root = 'PSP_007718_2350_'
-##MBARS.ID = 'PSP_007718_2350_RED'
-##panels=3
-root = 'TRA_000828_2495_RED_300PX'
-MBARS.ID = 'TRA_000828_2495_RED'
-panels = 4965
+root = 'PSP_007718_2350_'
+MBARS.ID = 'PSP_007718_2350_RED'
+panels=3
+##root = 'TRA_000828_2495_RED_300PX'
+##MBARS.ID = 'TRA_000828_2495_RED'
+##panels = 4965
 ##root = 'PSP_001501_2280_RED_NOMAP_300PX'
 ##MBARS.ID = 'PSP_001501_2280_RED'
 ##panels = 8977
@@ -31,11 +31,12 @@ plot = False
 bound = .1
 MBARS.NOMAP = True
 #for continuing broken runs, use Startat to specify which panel to begin on for the first run
-startat = 4637
+startat = 0
+
 
 #multirun parameters
-gams = [.7,.6,.8,.7,.6]
-bounds = [.01,.01,.1,.1,.1]
+gams = [.6,.6,.6,.6,.6]
+bounds = [.1,.11,.12,.13,.14]
 #CFA_results = []
 
 if fullrun:

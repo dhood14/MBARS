@@ -15,29 +15,39 @@ Catch all code to look at results
 
 
 #root = 'ESP_018352_1805_RED'
-root = 'TRA_000828_2495_RED_300PX'
-#root = 'PSP_007718_2350_'
+#root = 'TRA_000828_2495_RED_300PX'
+root = 'PSP_007718_2350_'
 MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(root)
 MBARS.FNM = root
 #runfile = 'gam60_bound10//'
 #runfiles = ['gam60_bound10//','gam60_bound1//','gam70_bound10//']
 
 MakeCFAs = False
-#controls for making CFAs
-runfiles = []
-#gams = [60,60,70,70,80,80]
-#bounds = [1,10,1,10,1,10]
-gams=[80]
-bounds=[1]
-for i in range(len(gams)):
-    runfile = 'gam%s_bound%s//'%(gams[i],bounds[i])
-    runfiles+=[runfile]
-MBARS.current()
-
-
+bigs = False
 imageanalysis = True
-#controls for examining images
-trgtfile = 'gam80_bound1//'
+
+
+#controls for making CFAs
+#determines diameter past which the program does not coutn boulders
+maxd = 2.25
+runfiles = []
+#doing this automatically now, will run on all unless told otherwise:
+allfiles = os.listdir(MBARS.PATH)
+runfiles = [f for f in allfiles if 'gam' in f]
+runfiles = [f+'//' for f in runfiles]
+##gams = [600,600,700,700]
+##bounds = [5,10,50,70,90,100]
+###gams=[70]
+###bounds=[1]
+##for i in range(len(gams)):
+##    runfile = 'gam%s_bound%s//'%(gams[i],bounds[i])
+##    runfiles+=[runfile]
+##MBARS.current()
+
+
+#controls for examining images & bigs
+trgtfile = 'gam600_bound100//'
+maxdiam = 2.25
 #find a way to make this automatic??
 num =0
 files = os.listdir('%s%s'%(MBARS.PATH,runfiles[0]))
@@ -72,18 +82,26 @@ def smooth(array,i,j,r):
 #where the actual work happens
 if MakeCFAs:
     record = file('%s%s_record.csv'%(MBARS.PATH,MBARS.FNM),mode='wb')
-    record.write('Filename ,Best Fit Rck Abundance\n')
+    record.write('Filename ,Best Fit Rck Abundance,R^2, maxd=%s\n'%(maxd))
     for i in range(len(runfiles)):
         plt.figure(i)
-        fit_k = MBARS.bulkCFA(runfiles[i],num,root)
-        print'Best fit rock abundance for file %s is %s percent'%(runfiles[i],fit_k*100)
+        fit_k, fit_r2 = MBARS.bulkCFA(runfiles[i],num+1,maxd,root)
+        if fit_k == None:
+            continue
+        print'Best fit rock abundance for file %s is %s percent with an R^2 of %s'%(runfiles[i],fit_k*100, fit_r2)
     #MBARS.plotCFArefs()
         plt.show()
-        record.write('%s,%s\n'%(runfiles[i],fit_k))
+        record.write('%s,%s,%s\n'%(runfiles[i],fit_k,fit_r2))
     record.close()
-    
+
+if bigs:
+    MBARS.FindExcluded(trgtfile,num,maxdiam)
+    for i in range(num+1):
+        bigs = MBARS.FindBigs(trgtfile,i, maxdiam)
+        plt.show()
+        
 if imageanalysis:
-    for i in range(num):
+    for i in range(num+1):
         print i
         MBARS.ExamineImage(trgtfile,i)
         #save = MBARS.CFA(i)
