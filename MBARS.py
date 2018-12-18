@@ -21,6 +21,7 @@ import skimage.feature as skfeat
 import skimage.morphology as skmorph
 import skimage.filters.rank as skrank
 import skimage.restoration as skrestore
+import skimage.util as skutil
 from scipy.ndimage import filters
 import scipy.stats as sps
 import imageio
@@ -28,13 +29,17 @@ import imageio
 #This is the MBARS library, it contains all the functions needed to run MBARS
 
 #Global Variables, adjust as needed:
+#REFPATH is where important reference files are stored, the key one is
+# the HiRISE info file (RDRCUMINDEX.TAB) needs to be in the REFPATH folder
 REFPATH = 'C://Users//dhood7//Desktop//MBARS//RefData//'
-PATH = "C://Users//dhood7//Desktop//MBARS//Images//TRA_000828_2495_RED_300PX//"
-FNM = "TRA_000828_2495_RED_300PX"
+#BASEPATH is where MBARS will look for the provided filename
+BASEPATH = 'C://Users//dhood7//Desktop//MBARS//Images//'
+PATH = None
+FNM = None
 
 #enter product ID
-ID = 'TRA_000828_2495_RED'
-NOMAP = True
+ID = None
+NOMAP = None
 
 WIDFACT = 2.
 LENFACT = 2.
@@ -84,7 +89,7 @@ def gamfun(gam=.6, plot=False, boundfrac=.1):
     if NOMAP:
         image = sktrans.rotate(image, 90+SAZ, resize = True,preserve_range =True)
     else:
-        image = sktrans.rotate(image,SUNANGLE, resize=True, preserve_range=True)
+        image = sktrans.rotate(image,NAZ-SAZ, resize=True, preserve_range=True)
     image = npma.masked_equal(image, 0)
 
     ''' rotation seems to cause some stray data to appear at the edge, this is often
@@ -163,23 +168,31 @@ def gamfun(gam=.6, plot=False, boundfrac=.1):
     imageseg.dump("%s%s%s_SEG.npy"%(PATH,runfile,FNM))
     #this is the full figure suite, which struggles when you have a big image
     if plot:
-        print("making plots...") 
-        plt.figure(1)
-        plt.imshow(imagemod, cmap='binary_r')
-        plt.figure(2)
-        plt.imshow(imageseg)
-        plt.figure (3)
-        plt.imshow(sktrans.rotate(image,-SUNANGLE,resize=True, preserve_range=True), cmap='binary_r')
+        fig,ax = plt.subplots(1,2,sharex = True, sharey = True)
+        ax[0].imshow(imagemod, cmap='binary_r', interpolation='none')
+        ax[1].imshow(imageseg,interpolation='none')
+##        plt.figure(1)
+##        plt.title('Gamma stretched image')
+##        plt.imshow(imagemod, cmap='binary_r')
+##        plt.figure(2)
+##        plt.title('shadows isolated image')
+##        plt.imshow(imageseg)
+        #plt.figure (3)
+        #plt.imshow(sktrans.rotate(image,-SUNANGLE,resize=True, preserve_range=True), cmap='binary_r')
 
         plt.show()
-
-    return(imagemod, imageseg, True,runfile)
+    #This makes sure that images with data but no shadows do not go through the segmentation process
+    if np.min(imageseg)>= bound:
+        good = False
+    else:
+        good=True
+    return(imagemod, imageseg, good ,runfile)
 
 
 #this method uses a gaussian fit to the data to find the shadow boundary
 #it takes in the linearized image that you want to use and returns the shadow boundary
 def gauss(x,sig,mu):
-    y = (1/(sig*np.sqrt(2*np.pi)))*np.exp((-1/2)*((x-mu)/sig)**2)
+    y = (1./(sig*np.sqrt(2.*np.pi)))*np.exp((-1./2.)*(((x-mu)/sig)**2.))
     return y
 def gauss_unnorm(x,sig,mu):
     y = np.exp((-1/2)*((x-mu)/sig)**2)
@@ -188,29 +201,42 @@ def gaussfit(image_lin, boundfrac, plot):
     #get the histogram of the image pixel intensities
     #odat = original data, edges = bin edges
     odat, edges = np.histogram(image_lin, bins=max(image_lin))
-    # tdat  =  trimmed data, odat with the first and last index zeroed out
-    tdat = np.copy(odat)
-    tdat[0] = 0
-    tdat[-1] = 0
-
-    tot = float(sum(tdat))
+    #print odat
+    xdat = range(len(odat))
+    #lets fill in the zeros, assigning the value of a given intensity to the nearest value
+    fdat = np.copy(odat)
+    fdat[0] = 1
+    fdat[-1] = 1
+    prev = 0
+    for i in range(len(fdat)):
+        if not fdat[i] == 0:
+            prev = fdat[i]
+        else:
+            fdat[i] = prev
+    tot = float(sum(fdat))
     if tot < 1.0:
         return None
-    #ndat = normalized data, tdat normalized to 1
-    ndat = tdat/tot
-    xdat = range(len(odat))
+    ndat = map(lambda x: float(x)/tot, fdat)
+    
     #popt is the curve fit to ndat along xdat assuming the form gauss, with p0 as the initial values
     try:
-        popt, pcov = curve_fit(gauss, xdat, ndat, p0=[1,np.argmax(tdat)])
+        popt, pcov = curve_fit(gauss, xdat, ndat, p0=[10,np.argmax(ndat)])
     except(RuntimeError):
         return None
     #bund = mu - sigma*sqrt(-2*ln(boundfraction))
     #solve for the x location where y = bf*ymax
-    bound = popt[1] - popt[0]*np.sqrt(-2*np.log(boundfrac))
+    bound = popt[1] - popt[0]*np.sqrt(-2.*np.log(boundfrac))
     if plot:
+        percentage = 0
+        for i in range(int(bound)):
+            percentage+=odat[i]
+        percentage = 100.*(float(percentage)/float(tot))
+        print '%s percent of the image in shadow'%(percentage)
+        print sum(ndat)
         plt.plot(bound,max(ndat),'k*')
         plt.plot(xdat, ndat, "b-")
         plt.plot(xdat, gauss(xdat, popt[0], popt[1]), "g*")
+        #plt.plot(sxdat,gauss(sxdat,10,np.argmax(ndat)))
         plt.show()
         
     return bound
@@ -269,9 +295,18 @@ def watershedmethod(image):
     #this is the new way of finding the shadows in an image
     #first find the "plateau" value, we will need this for masking
     plat = sps.mode(image.compressed())
+    #fill the image with a known value in order to preserve the mask
     temp = image.filled(np.max(image)+1)
+    #invert the image so the shadows are peaks not lows
     temp = temp*(-1)+np.max(image)+1
+    #find the peaks in the image, return the points as a nx2 array
     points = skfeat.peak_local_max(temp,min_distance=1, indices=True)
+
+    #put in a guard against images with no shadows
+    threshold = len(image.compressed())/2
+    if len(points)>threshold:
+        return np.ones_like(image)
+    #prepare to convert the points matrix to an image-like array
     view = np.zeros_like(image)
     flag = 2
     for i in points:
@@ -634,13 +669,14 @@ def getshads(runfile, num, silenced = True):
             print "No shadow file exists"
         return None
     return load
-def GISprep(runfile,mod):
+def GISprep(runfile,num,mod):
     #this takes the target file and makes the necessary  arc documents to plot them
     #assumes that source image and matching arc documents are available in same folder
     #mod is tacked onto the name, SEG will match with segmented images for example
-    shutil.copyfile('%s%s.PGw'%(PATH,FNM),'%s%s%s_%s.PGw'%(PATH,runfile,FNM,mod))
-    shutil.copyfile('%s%s.PNG.aux.xml'%(PATH,FNM),'%s%s%s_%s.PNG.aux.xml'%(PATH,runfile,FNM,mod))
-    shutil.copyfile('%s%s.PNG.ovr'%(PATH,FNM),'%s%s%s_%s.PNG.ovr'%(PATH,runfile,FNM,mod))
+    shutil.copyfile('%s%s%s.PGw'%(PATH,FNM,num),'%s%s%s%s_%s.PGw'%(PATH,runfile,FNM,num,mod))
+    shutil.copyfile('%s%s%s.PNG.aux.xml'%(PATH,FNM,num),'%s%s%s%s_%s.PNG.aux.xml'%(PATH,runfile,FNM,num,mod))
+    ###OVRs are just pyramid data, dont need to copy those
+    ##shutil.copyfile('%s%s%s.PNG.ovr'%(PATH,FNM,num),'%s%s%s%s_%s.PNG.ovr'%(PATH,runfile,FNM,num,mod))
 def bulkCFA(runfile,maxnum,maxd,root):
     ''' runs the CFA protocol on a bunch of files and gives an average
 '''
@@ -648,16 +684,22 @@ def bulkCFA(runfile,maxnum,maxd,root):
         new = raw_input('make new CDFs? y/n\n')
         if new == 'y' or new == 'n':
             break
-    CFAs = []
+    allCFAs = []
     if new == 'n':
         for i in range(maxnum):
             try:
-                dat = np.loadtxt('%s%s%s%s_CFA.csv'%(PATH,runfile,FNM,i),delimiter=',')
-                plt.plot(dat[1],dat[0],'b-',alpha=.05)
+                data = open('%s%s%s%s_CFA.csv'%(PATH,runfile,FNM,i),'r')
+                dat = np.loadtxt(data,delimiter=',')
+                
             except(IOError):
                 continue
-            CFAs+=[dat]
-        if CFAs == []:
+            try:
+                plt.plot(dat[1],dat[0],'b-',alpha=.05)
+            except(IndexError):
+                print 'failed on %s'%(i)
+                continue
+            allCFAs+=[dat]
+        if allCFAs == []:
             print "No CDFs Present"
             new = 'y'
     if new == 'y':
@@ -666,20 +708,49 @@ def bulkCFA(runfile,maxnum,maxd,root):
             #CFA[0] = actual CFA data
             #CFA[1] = bins for CFA data, same for all
             dat = CFA(runfile,i, maxd)
-            if any(dat):
-                plt.plot(dat[1],dat[0],'b-',alpha=.05)
-                CFAs+=[dat]
-##    if not any(CFAs):
-##        return None, None
-    bins = CFAs[0][1]
-    CFAs = np.array(CFAs)
-    CFAs = CFAs[:,0]
+            try:
+                plt.plot(dat[0],dat[2],'b-',alpha=.05)
+                allCFAs+=[dat]
+            except(IndexError):
+                continue
+    if not any(allCFAs):
+        return None, None
+    #extract bins and the three CFAs (upCFAs = upper end of CFA uncertainty, downCFAs lower end of uncertainty)
+    bins = allCFAs[0][0]
+    allCFAs = np.array(allCFAs)
+    CFAs = allCFAs[:,2]
+    upCFAs = allCFAs[:,1]
+    downCFAs = allCFAs[:,3]
+    #tranpose the files to go from (image,bins) to (bins,image) format
     T_CFAs = np.transpose(CFAs)
+    T_upCFAs = np.transpose(upCFAs)
+    T_downCFAs = np.transpose(downCFAs)
+    #average accross bins, results in 1-D array of length 'bins'
     avgCFAs = map(np.average,T_CFAs)
+    avgupCFAs = map(np.average,T_upCFAs)
+    avgdownCFAs = map(np.average,T_downCFAs)
+##    print bins
+##    print CFAs
+##    print upCFAs
+##    print downCFAs
+    #fit to each end of the spectrum
     fit_k, fit_r2 = fittoRA(bins,avgCFAs, [1.5,maxd])
+    upfit_k, upfit_r2 = fittoRA(bins,avgupCFAs, [1.5,maxd])
+    downfit_k, downfit_r2 = fittoRA(bins,avgdownCFAs, [1.5,maxd])
+
+    
+    #calculate RA for each side of uncertainty
     fit_bins = np.linspace(min(bins),max(bins),100)
     fitRA = GolomPSDCFA(fit_bins,fit_k)
-    plt.plot(fit_bins,fitRA,'k-')
+    upfitRA = GolomPSDCFA(fit_bins,upfit_k)
+    downfitRA = GolomPSDCFA(fit_bins,downfit_k)
+
+    #plot them all!
+    #errors in format of array [2,bins] all must be positive, lower errors first, see matplotlib API
+    errors = []
+    errors+=[fitRA-downfitRA]
+    errors+=[upfitRA-fitRA]
+    plt.errorbar(fit_bins,fitRA,yerr = errors,c = 'k',marker='*')
     plt.plot(bins,avgCFAs, 'g*')
     plotCFArefs()
     plt.xscale('log')
@@ -689,7 +760,7 @@ def bulkCFA(runfile,maxnum,maxd,root):
     plt.title('CFA for image %s at parameters %s'%(root,runfile))
     plt.savefig('%s%sCFAPlot.png'%(PATH,runfile))
     #plt.show()
-    return fit_k, fit_r2
+    return fit_k,upfit_k,downfit_k, fit_r2
     
 def CFA(runfile,num,maxd):
     #Produces data for Cumulative Fractional Area, saves and produces plot
@@ -705,25 +776,35 @@ def CFA(runfile,num,maxd):
             break
         if dat.measured:
             sizes+=[dat.bouldwid_m]
-            #this is not great, as it is assigned a bunch, but I dont know how to do it just once smoothly
+    
             res = dat.resolution
     if not any(sizes):
         return [None]
     #im = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
     #this is silly to reload the image just to get area, we can attach that to boulders
     im = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
-    #this is on pixel basis for now, will change when we can scale to meters more easily
+    #get the image area in meters
     im_area = float(len(im.compressed()))*res*res
     #print area
+    #create the two ends of the uncertainy spectrum, assumes 1 pixel uncertainty
+    err = 1
     sizes = np.asarray(sizes)
+    upsizes = sizes+err*res
+    downsizes = sizes-err*res
     #sizes = sizes*res
     sizes = [x for x in sizes if x < maxd]
+    upsizes = [x for x in upsizes if x<maxd]
+    downsizes = [x for x in downsizes if x<maxd]
     sizes = np.asarray(sizes)
+    upsizes = np.array(upsizes)
+    downsizes = np.array(downsizes)
     bins = np.linspace(0,maxd,10*maxd+1)
     SFD, binsconf = np.histogram(sizes, bins=bins)
     #SFD = np.append(SFD,0)
     SFD = SFD/im_area
     sizes.sort()
+    upsizes.sort()
+    downsizes.sort()
     #areas = np.pi*(sizes/2)**2
     #SA = [sizes,areas]
     #SA = np.asarray(SA)
@@ -733,12 +814,18 @@ def CFA(runfile,num,maxd):
     #TA = sum(areas)
     #CFA will be a list of y points, with the x points in sizes
     CFA = np.zeros_like(bins)
+    upCFA = np.copy(CFA)
+    downCFA = np.copy(CFA)
     for i in range(len(bins)):
         CFA[i] = float(sum(map(lambda x: np.pi*((x/2.)**2),sizes[sizes>bins[i]])))/im_area
-    save1 = [CFA.tolist(),bins]
-    save2 = [SFD.tolist(),binsconf[:-1].tolist()]
-    np.savetxt('%s%s%s%s_CFA.csv'%(PATH,runfile,FNM,num), save1,delimiter=',')
-    np.savetxt('%s%s%s%s_SFD.csv'%(PATH,runfile,FNM,num), save2,delimiter=',')  
+        upCFA[i] = float(sum(map(lambda x: np.pi*((x/2.)**2),upsizes[upsizes>bins[i]])))/im_area
+        downCFA[i] = float(sum(map(lambda x: np.pi*((x/2.)**2),downsizes[downsizes>bins[i]])))/im_area
+    save1 = [bins,upCFA.tolist(),CFA.tolist(),downCFA.tolist()]
+    save2 = [binsconf[:-1].tolist(),SFD.tolist()]
+    cfasavefile = open('%s%s%s%s_CFA.csv'%(PATH,runfile,FNM,num),'w')
+    np.savetxt(cfasavefile, save1,delimiter=',')
+    sfdsavefile = open('%s%s%s%s_SFD.csv'%(PATH,runfile,FNM,num),'w')
+    np.savetxt(sfdsavefile, save2,delimiter=',')  
 ##    CFA[0] = TFA-(areas[0]/area)
 ##    for i in range(1,len(sizes)):
 ##        CFA[i] = CFA[i-1] - (areas[i]/area)
@@ -746,7 +833,7 @@ def CFA(runfile,num,maxd):
     #plt.plot(bins, CFA, 'b-', alpha=.01)
     #plt.xscale('log')
     #plt.yscale('log')
-    return [CFA.tolist(),bins]
+    return [bins,upCFA.tolist(),CFA.tolist(),downCFA.tolist()]
 
 def plotCFArefs():
     ''' plots data from golombek 2008 for comparison, user controlled which one
@@ -849,35 +936,46 @@ def exportdata(runfile,num):
     #np.savetxt('%s%s%s_data.csv'%(PATH,FNM,num),attributes, delimiter="'")
     return attributes
     
-def ExamineImage(runfile,num):
+def ExamineImage(runfile,num, showblanks):
+    hasshads = True
     try:
         att = exportdata(runfile,num)
     except(IOError):
-        #print 'no shadows in image %s'%(num)
-        return
-    load = getshads(runfile,num)
-    #nned two so you dont reuse same artist, silly but necessary
-    patches1 = []
-    patches2 = []
-    while True:
-        try:
-            dat = pickle.load(load)
-        except EOFError:
-            break
-        patches1 += dat.patchplot()
-        patches2 +=dat.patchplot()
-    image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
-    filtimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
-    fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
-    ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
-    ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
-    ax[1][0].imshow(filtimage,interpolation='none')
-    ax[1][1].imshow(filtimage,interpolation='none')
-    for j in patches1:
-        ax[0][1].add_patch(j)
-    for j in patches2:
-        ax[1][1].add_patch(j)
-    plt.show()
+        print 'no shadows in image %s'%(num)
+        hasshads = False
+    if hasshads:
+        load = getshads(runfile,num)
+        #nned two so you dont reuse same artist, silly but necessary
+        patches1 = []
+        patches2 = []
+        while True:
+            try:
+                dat = pickle.load(load)
+            except EOFError:
+                break
+            patches1 += dat.patchplot()
+            patches2 +=dat.patchplot()
+        image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+        filtimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
+        fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
+        ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
+        ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
+        ax[1][0].imshow(filtimage,interpolation='none')
+        ax[1][1].imshow(filtimage,interpolation='none')
+        for j in patches1:
+            ax[0][1].add_patch(j)
+        for j in patches2:
+            ax[1][1].add_patch(j)
+        plt.show()
+    elif showblanks:
+        image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+        filtimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
+        fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
+        ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
+        ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
+        ax[1][0].imshow(filtimage,interpolation='none')
+        ax[1][1].imshow(filtimage,interpolation='none')
+        plt.show()
     return
         
         
@@ -936,7 +1034,208 @@ def FindExcluded(runfile,maxnum,maxdiam):
     print ('%s boulders found in image, %s percent ignored due to diameter'%(total,exclpercent))
     return
     
+def DensMap(runfile,num,diam = 1.75,drange=.25):
+    '''code to make density maps and prep for reentry into ArcGIS
+        Runfile is the current runfile (i.e. gam600bound100//)
+        num is the panel number
+        diam is the boulder diameter to use
+        drange is the +- size of the bin
+        default settings will get the density of bouldes between 1.5 and 2m
+        '''
+    load = getshads(runfile,num)
+    ys = []
+    xs = []
+    if not load:
+        return
+    while True:
+        try:
+            dat = pickle.load(load)
+        except(EOFError):
+            break
+        if dat.measured and dat.bouldwid_m < diam+drange and dat.bouldwid_m > diam-drange:
+            ys+=[dat.bouldcent[0]]
+            xs+=[dat.bouldcent[1]]
+    
+    hist, yedge, xedge = np.histogram2d(ys,xs,bins=20)
+    #lets build these data into a smoothed image
+    seg = np.load('%s%s%s%s_SEG.npy'%(PATH, runfile, FNM,num))
+##    #fix the xedge and yedge beginnings and ends
+##    yedge[0] = 0
+##    xedge[0] = 0
+##    yedge[-1] = len(seg)
+##    xedge[-1] = len(seg[0])
+##    densmap = np.zeros_like(seg)
+##    xpos = 0
+##    ypos = 0
+##    for i in range(len(densmap)):
+##        if i >= yedge[ypos]:
+##            ypos+=1
+##        for j in range(len(densmap[0])):
+##            if j>= xedge[xpos]:
+##                xpos+=1
+##            densmap[i,j] = hist[ypos-1,xpos-1]
+##        xpos=0
+    #print hist
+    #print densmap
+##    
+##    #smooth the density map
+##
+##    smdensmap = np.copy(densmap)
+##    for i in range(len(densmap)):
+##        for j in range(len(densmap[0])):
+##            smdensmap[i][j] = smooth(densmap,i,j,20)
+            
+    #plt.plot(xs,ys)
+    plt.figure(1)
+    plt.imshow(hist)
+##    plt.figure(2)
+##    plt.imshow(densmap)
+##    plt.figure(3)
+##    plt.imshow(seg)
+    #plt.figure(4)
+    #plt.imshow(smdensmap)
+    plt.show()
+    #return(xedge, yedge)
+    #spm.imsave('%s%s%s_DENS.PNG'%(MBARS.PATH, root, num), densmap)
+    return
 
+def OutToGIS(runfile,maxnum,extension='.PGw'):
+    '''this code will take an entire run and export the boulder data to a GIS-interpretable format, assume pngs for the moment'''
+    ''' A key part of this is interpreting the PGW files, which follow this convention:
+        6 values on 6 lines:
+        A
+        D
+        B
+        E
+        C
+        F
+        these are inputs to two equations for xmap and ymap, the coordinates of the pixel in the map, based on x and y, the pixel coordinates of the image:
+        xmap = Ax + By +C
+        ymap = Dx + Ey +F
+    '''
+    datafile = open("%s%s%s_boulderdata.csv"%(PATH,runfile,FNM),'w')
+    #put in the headers, we will start small with the boulders:
+    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m\n'
+    datafile.write(headers)
+    #bring in the original rotation information
+    if NOMAP:
+        rotang = -90-SAZ
+    else:
+        rotang = SAZ-NAZ
+
+    rotang_r = np.radians(rotang)
+    for i in range(maxnum+1):
+        #bring in the image each time, wouldnt have to do this if they were all identical
+        #but that cant be gauranteed
+        try:
+            seg = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,i))
+        except(IOError):
+            continue
+        lycent = len(seg)/2.
+        lxcent = len(seg[0])/2.
+        seg = None
+        o_image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,i))
+        o_lycent = len(o_image)/2.
+        o_lxcent = len(o_image[0])/2.
+        o_image = None
+        shads = getshads(runfile,i)
+        if not shads:
+            continue
+        worldfile = open('%s%s%s%s'%(PATH,FNM,i,extension),'r')
+        constants = []
+        for line in worldfile:
+            val = float(line.rstrip())
+            constants+=[val]
+        boulds = []
+        marks = []
+        while True:
+            try:
+                dat  = pickle.load(shads)
+            except(EOFError):
+                break
+            if dat.measured:
+                #weve got to do something a little tricky here, we need the pixel location of the boulders in the un-rotated images
+                #first we make a pointmap with flags to keep track
+                #boulds+=[dat]
+                flag = dat.flag
+                bouldwid_m = dat.bouldwid_m
+                bouldheight_m = dat.bouldheight_m
+                xpos = dat.bouldcent[1]
+                ypos = dat.bouldcent[0]
+
+                #change xpos and ypos to origin on the image center
+                xpos_c = xpos-lxcent
+                ypos_c = ypos-lycent
+
+                #rotate them, must give the negative rotation
+                xpos_rot_c = xpos_c*np.cos(-rotang_r) - ypos_c*np.sin(-rotang_r)
+                ypos_rot_c = xpos_c*np.sin(-rotang_r) + ypos_c*np.cos(-rotang_r)
+
+                #re-reference to the corner of the image
+                xpos_rot = xpos_rot_c + o_lxcent
+                ypos_rot = ypos_rot_c + o_lycent
+                xmap = constants[0]*xpos_rot + constants[2]*ypos_rot + constants[4]
+                ymap = constants[1]*xpos_rot + constants[3]*ypos_rot + constants[5]
+                #write it all down
+                info = '%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m)
+                datafile.write(info)
+                
+                #marks+=[[dat.bouldcent[0],dat.bouldcent[1],dat.flag]]
+                #x = dat.bouldcent[1]
+                #y = dat.bouldcent[0]
+
+        
+
+            
+##        #bring in seg as a dummy to get parameters from
+##        seg = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,i))
+##        pointmap = npma.copy(seg)
+##        seg = None
+##        pointmap.fill(0)
+##        #mark the image (in sun-up orientation) with flags
+##        for k in marks:
+##            print k
+##            y = k[0]
+##            x = k[1]
+##            pointmap[y][x] = k[2]
+##            
+##        #rotate the image back to the north-up orientation
+##        pointmap_UR = npma.copy(pointmap)
+##        if NOMAP:
+##            rotang = -90-SAZ
+##        else:
+##            rotang = SAZ-NAZ
+##        pointmap_UR = sktrans.rotate(pointmap_UR,rotang,resize = False, preserve_range=True)
+##        #fetch the original image to get the crops right
+##        o_image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,i))
+##        cropy = (len(pointmap_UR)-len(o_image))/2
+##        cropx = (len(pointmap_UR[0])-len(o_image[0]))/2
+##        pointmap_UR = skutil.crop(pointmap_UR,((cropy,cropy),(cropx,cropx)))
+##        #only for checking purposes:
+##        imageio.imsave('%s%s%s%_pointmap.png'%(PATH,runfile,FNM,i),pointmap_UR)
+##        for j in range(len(pointmap_UR)):
+##            for h in range(len(pointmap_UR[j])):
+##                for rocks in boulds:
+##                    val = pointmap_UR[j][h]
+##                    if val == rocks.flag:
+##                        flag = rocks.flag
+##                        bouldwid_m = rocks.bouldwid_m
+##                        bouldheight_m = rocks.bouldheight_m
+##                        #ok, find the flag back in the image, ill put in some hacky code to avoid the edges for now:
+##                        x = h
+##                        y = j
+##                        xmap = constants[0]*x + constants[2]*y + constants[4]
+##                        ymap = constants[1]*x + constants[3]*y + constants[5]
+##                        
+##                        info = '%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m)
+##                        datafile.write(info)
+    datafile.close()
+    return
+            
+        
+        
+            
+    
 def LROCAdapter():
     '''this code is  intended as a quick fix to looking at LROC images, longer term
 better infrastructure should be put in place to make this smoother'''
@@ -1207,6 +1506,84 @@ def groundaz(glat, glon, slat, slon):
 
         return az
 
+def RunParams(filename):
+    '''a long term solution to running multiple images, this will
+create text files in each image file so that various parameters dont need to be
+reentered, files read:
+root
+ID
+NOMAP
+Panels
+'''
+    parampath = '%s%s//runparams.txt'%(BASEPATH,filename)
+    if not os.path.isdir('%s%s'%(BASEPATH,filename)):
+        print 'no such directory\n'
+        return None,None,None,None
+    if os.path.isfile(parampath):
+        print 'Running Parameters found\n'
+        #get these parameters
+        paramfile = open(parampath,'rb')
+        info = paramfile.readline()
+        info = info.rstrip()
+        root,mbarsid,mbarsnomap,panels = info.split(',')
+##        root = paramfile.readline()
+##        root = root.rstrip
+        
+##        mbarsid = paramfile.readline
+##        mbarsid = mbarsid.rstrip()
+        
+##        mbarsnomap = paramfile.readline()
+        if 'True' in mbarsnomap:
+            mbarsnomap = True
+        else:
+            mbarsnomap = False
+
+##        panels = paramfile.readline()
+##        panels = panels.rstrip()
+        panels = int(panels)
+
+        
+    else:
+        print "no parameters found, making new file\n"
+        
+        params = open(parampath,'wb')
+        q1 = 'enter MBARS ID\n'
+        mbarsid = raw_input(q1)
+        
+        q2 = 'Is the image projected (i.e. north is up?) y/n \n'
+        while True:
+            answer = raw_input(q2)
+            if answer == 'y':
+                mbarsnomap = False
+                break
+            elif answer == 'n':
+                mbarsnomap = True
+                break
+            else:
+                print 'y/n \n'
+        #retrieve number of panels
+        files = os.listdir('%s%s'%(BASEPATH,filename))
+        files = [s for s in files if '.PNG' in s]
+        files = [s.replace(filename,'') for s in files]
+        files = [filter(lambda s: s in '0123456789',j) for j in files]
+        files = [int(s) for s in files]
+        panels = np.max(files) +1
+        print('%s panels found'%panels)
+
+        root = filename
+
+        #write it all in:
+        params.write('%s,'%root)
+        params.write('%s,'%mbarsid)
+        params.write('%s,'%mbarsnomap)
+        params.write('%s'%panels)
+        params.close()
+
+    return root, mbarsid, mbarsnomap, panels
+        
+        
+        
+    
 
 ########INITIALIZATION##########
 INANGLE,SUNANGLE,RESOLUTION,NAZ, SAZ = start()

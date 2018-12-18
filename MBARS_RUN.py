@@ -8,17 +8,31 @@ import cPickle as pickle
 set number of images, this is expecting a series of images with the same root name
 and numerals at the end, i.e. "root0.PNG" and "root23.PNG"
 '''
-root = 'PSP_007718_2350_'
-MBARS.ID = 'PSP_007718_2350_RED'
-panels=3
+##root = 'PSP_007718_2350_'
+##MBARS.ID = 'PSP_007718_2350_RED'
+##panels=3
+##MBARS.NOMAP = True
+
 ##root = 'TRA_000828_2495_RED_300PX'
 ##MBARS.ID = 'TRA_000828_2495_RED'
 ##panels = 4965
+
 ##root = 'PSP_001501_2280_RED_NOMAP_300PX'
 ##MBARS.ID = 'PSP_001501_2280_RED'
 ##panels = 8977
+
+##root = 'ESP_028612_1755_RED66_'
+##MBARS.ID = 'ESP_028612_1755_RED'
+##MBARS.NOMAP = False
+##panels = 204
+##
+#filename = 'PSP_007718_2350_RED300px'
+filename = 'TRA_000828_2495_RED500PX'
 fullrun =False
 multirun = True
+
+root, MBARS.ID, MBARS.NOMAP,panels = MBARS.RunParams(filename)
+
 MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(root)
 MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ = MBARS.start()
 #MBARS.SUN = [1.,1.]
@@ -29,14 +43,14 @@ MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ = MBARS.st
 gam = .6
 plot = False
 bound = .1
-MBARS.NOMAP = True
+#MBARS.NOMAP = False
 #for continuing broken runs, use Startat to specify which panel to begin on for the first run
 startat = 0
 
 
 #multirun parameters
-gams = [.6,.6,.6,.6,.6]
-bounds = [.1,.11,.12,.13,.14]
+gams = [.6,.6,.6]
+bounds = [.09,.10,.11]
 #CFA_results = []
 
 if fullrun:
