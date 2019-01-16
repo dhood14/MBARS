@@ -49,6 +49,7 @@ NAZ = None
 SAZ = None
 SUNANGLE = None
 RESOLUTION = None
+ROTANG = None
 #MAX EXPECTED BOULDER SIZE, expressed in pixels
 MD = 30
 MA = np.pi*(MD/2)**2
@@ -58,9 +59,9 @@ minA = 4
 
 '''this is called at the end to initialize the program'''
 def start():
-    i,s,r,n, saz = getangles(ID)
+    i,s,r,n, saz,rotang = getangles(ID)
     current()
-    return i,s,r,n,saz
+    return i,s,r,n,saz, rotang
     
 #Inputs: image = Image to be analyzed (a 2 or 3-d np.array), gam = value for Gamma,
 # png = boolean dictating if the image is a 3-D array (True if 3D), plot = True to plot things, False to not
@@ -86,10 +87,13 @@ def gamfun(gam=.6, plot=False, boundfrac=.1):
         image=imagetemp
     #sharpening was attempted, it destroyed any boulder shapes, left for now
     #image = skrank.enhance_contrast(image, skmorph.disk(3))
-    if NOMAP:
-        image = sktrans.rotate(image, 90+SAZ, resize = True,preserve_range =True)
-    else:
-        image = sktrans.rotate(image,NAZ-SAZ, resize=True, preserve_range=True)
+##    if NOMAP:
+##        rotang = 90+SAZ
+##            else:
+##        #rotang = NAZ-SAZ
+##        rotang = -sunangle
+        
+    image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
     image = npma.masked_equal(image, 0)
 
     ''' rotation seems to cause some stray data to appear at the edge, this is often
@@ -401,10 +405,10 @@ class shadow(object):
     def run(self):
         #main function that does most things we want it to do
         
-        #print 'finding border'
+        
         self.findborder()
         self.mirror()
-        #print self.border
+        
 
         #to change what kind of border to use during fit, change this argument
         #self.odrfit()
@@ -412,9 +416,8 @@ class shadow(object):
         #self.AP_odrfit()
         #self.AP_odrfit_m()
         self.odrfit_m()
-        #print'measureing...'
+        
         if self.fitgood:
-            #self.ellipsesolve(self.fitbeta)
             #self.boulderfit()
             self.shadowmeasure_m()
 
@@ -590,14 +593,14 @@ class shadow(object):
             self.bouldwid = 2*abs(factor*self.fitbeta[3])
             self.shadlen = abs(factor*self.fitbeta[1])
             self.bouldcent = [self.fitbeta[0],self.fitbeta[2]]
-            self.bouldheight = self.shadlen/np.tan(self.inangle)
+            self.bouldheight = self.shadlen/np.tan(np.radians(self.inangle))
             self.measured = True
         if test > 0:
             factor = np.sin(self.fitbeta[4])
             self.bouldwid = 2*abs(factor*self.fitbeta[1])
             self.shadlen = abs(factor*self.fitbeta[3])
             self.bouldcent = [self.fitbeta[0],self.fitbeta[2]]
-            self.bouldheight = self.shadlen/np.tan(self.inangle)
+            self.bouldheight = self.shadlen/np.tan(np.radians(self.inangle))
             self.measured = True
         self.bouldwid_m = self.bouldwid*self.resolution
         self.shadlen_m = self.shadlen*self.resolution
@@ -605,6 +608,7 @@ class shadow(object):
         return
         
     def ellipse (self, beta, coords):
+        '''note alpha (beta[4]) is recorded in radians'''
         y = coords[0]
         x = coords[1]
 
@@ -616,16 +620,17 @@ class shadow(object):
         #alpha is the clockwise angle of rotation
         #alpha = np.arctan(self.sunangle[1]/self.sunangle[0])
         return (((y-yc)*np.cos(alpha)+(x-xc)*np.sin(alpha))/ay)**2 + (((x-xc)*np.cos(alpha)-(y-yc)*np.sin(alpha))/ax)**2 - 1
-    def AP_ellipse(self, beta, coords):
-        y = coords[0]
-        x = coords[1]
-        yc = beta[0]
-        xc = beta[2]
-        ay = beta[1]
-        ax = self.area/(np.pi*ay)
-        #alpha is the clockwise angle of rotation
-        alpha = beta[3]
-        return (((y-yc)*np.cos(alpha)+(x-xc)*np.sin(alpha))/ay)**2 + (((x-xc)*np.cos(alpha)-(y-yc)*np.sin(alpha))/ax)**2 - 1
+###Got doubled somehow, this one uses self.area (the area of the shadow) as opposed to marea (mirrored area, the double shadow area)
+##    def AP_ellipse(self, beta, coords):
+##        y = coords[0]
+##        x = coords[1]
+##        yc = beta[0]
+##        xc = beta[2]
+##        ay = beta[1]
+##        ax = self.area/(np.pi*ay)
+##        #alpha is the clockwise angle of rotation
+##        alpha = beta[3]
+##        return (((y-yc)*np.cos(alpha)+(x-xc)*np.sin(alpha))/ay)**2 + (((x-xc)*np.cos(alpha)-(y-yc)*np.sin(alpha))/ax)**2 - 1
 
     def AP_ellipse(self, beta, coords):
         y = coords[0]
@@ -680,6 +685,8 @@ def GISprep(runfile,num,mod):
 def bulkCFA(runfile,maxnum,maxd,root):
     ''' runs the CFA protocol on a bunch of files and gives an average
 '''
+    #set value for maximum on plots (in meters)
+    plotmax = 3
     while True:
         new = raw_input('make new CDFs? y/n\n')
         if new == 'y' or new == 'n':
@@ -705,16 +712,19 @@ def bulkCFA(runfile,maxnum,maxd,root):
     if new == 'y':
         for i in range(maxnum):
             #acuire all the CFA data, this will come in the form:
-            #CFA[0] = actual CFA data
-            #CFA[1] = bins for CFA data, same for all
+            #CFA[0] = bins
+            #CFA[1] = lower error bound CFA
+            #[2] = actual CFA data
+            #[3] = Upper bound error CFA
             dat = CFA(runfile,i, maxd)
-            try:
-                plt.plot(dat[0],dat[2],'b-',alpha=.05)
+            #Keep an eye on this, would break quickly if CFA is changed
+            if len(dat) == 4:
+                #plt.plot(dat[0],dat[2],'b-',alpha=.05)
                 allCFAs+=[dat]
-            except(IndexError):
-                continue
-    if not any(allCFAs):
-        return None, None
+                #print len(dat)
+
+##    if not any(allCFAs):
+##        return None, None
     #extract bins and the three CFAs (upCFAs = upper end of CFA uncertainty, downCFAs lower end of uncertainty)
     bins = allCFAs[0][0]
     allCFAs = np.array(allCFAs)
@@ -750,13 +760,19 @@ def bulkCFA(runfile,maxnum,maxd,root):
     errors = []
     errors+=[fitRA-downfitRA]
     errors+=[upfitRA-fitRA]
-    plt.errorbar(fit_bins,fitRA,yerr = errors,c = 'k',marker='*')
-    plt.plot(bins,avgCFAs, 'g*')
-    plotCFArefs()
+    #plots stack in reverse, so plot what you want on top first (I think...)
+    plt.plot(bins,avgCFAs, 'gs',label = root,zorder=3)
+    
+    plt.errorbar(fit_bins,fitRA,zorder=2,label = 'RA Envelope',yerr = errors,ecolor = 'k',c = 'k',marker='|',alpha=.5)
+    
+    plotCFArefs(plotmax)
     plt.xscale('log')
     plt.yscale('log')
-    plt.xlim(xmin= .5, xmax = 5)
+    plt.xlim(xmin= 1, xmax = plotmax)
+    plt.xlabel('Boulder Diameter (m)')
+    plt.ylabel('Cumulative Fractional Area')
     plt.ylim(ymin=10**(-5))
+    plt.legend(loc=3)
     plt.title('CFA for image %s at parameters %s'%(root,runfile))
     plt.savefig('%s%sCFAPlot.png'%(PATH,runfile))
     #plt.show()
@@ -835,28 +851,28 @@ def CFA(runfile,num,maxd):
     #plt.yscale('log')
     return [bins,upCFA.tolist(),CFA.tolist(),downCFA.tolist()]
 
-def plotCFArefs():
+def plotCFArefs(xmax):
     ''' plots data from golombek 2008 for comparison, user controlled which one
 '''
     query = 'Plot: 1= just reference \n 2= just TRA_000828_2495 \n 3=Sholes PSP_007718_2350 Hand Counts \n 5=all\n'
     option = int(raw_input(query))
     if option == 1 or option == 5:
         #dat = np.loadtxt('%sGolomRefCFACurves.csv'%(REFPATH),delimiter=',')
-        xs = np.linspace(.1,5)
+        xs = np.linspace(.1,xmax)
         y20 = GolomPSDCFA(xs,.2)
         y30 = GolomPSDCFA(xs,.3)
         y40 = GolomPSDCFA(xs,.4)
         y50 = GolomPSDCFA(xs,.5)
         x = np.tile(xs,4)
         y = np.concatenate((y20,y30,y40,y50))
-        plt.plot(x,y,'m*',alpha=.7)
+        plt.plot(x,y,'m*',alpha=.2,label = '20,30,40,50% RA',zorder=1)
     if option == 2 or option == 5:
         print 'cannot do until data is provided'
         #dat = np.loadtxt('%sGolomCFADat_TRA_000828_2495.csv'%(REFPATH),delimiter=',')
         #plt.plot(dat[0],dat[1],'k*',alpha=.7)
     if option == 3 or option == 5:
         dat = np.loadtxt('%sPSP_007718_2350Ref.csv'%(REFPATH),delimiter=',')
-        plt.plot(dat[0],dat[1],'b*')
+        plt.plot(dat[0],dat[1],'b*',label='Manual Results')
     return
     
 def PSD(k):
@@ -1034,70 +1050,70 @@ def FindExcluded(runfile,maxnum,maxdiam):
     print ('%s boulders found in image, %s percent ignored due to diameter'%(total,exclpercent))
     return
     
-def DensMap(runfile,num,diam = 1.75,drange=.25):
-    '''code to make density maps and prep for reentry into ArcGIS
-        Runfile is the current runfile (i.e. gam600bound100//)
-        num is the panel number
-        diam is the boulder diameter to use
-        drange is the +- size of the bin
-        default settings will get the density of bouldes between 1.5 and 2m
-        '''
-    load = getshads(runfile,num)
-    ys = []
-    xs = []
-    if not load:
-        return
-    while True:
-        try:
-            dat = pickle.load(load)
-        except(EOFError):
-            break
-        if dat.measured and dat.bouldwid_m < diam+drange and dat.bouldwid_m > diam-drange:
-            ys+=[dat.bouldcent[0]]
-            xs+=[dat.bouldcent[1]]
-    
-    hist, yedge, xedge = np.histogram2d(ys,xs,bins=20)
-    #lets build these data into a smoothed image
-    seg = np.load('%s%s%s%s_SEG.npy'%(PATH, runfile, FNM,num))
-##    #fix the xedge and yedge beginnings and ends
-##    yedge[0] = 0
-##    xedge[0] = 0
-##    yedge[-1] = len(seg)
-##    xedge[-1] = len(seg[0])
-##    densmap = np.zeros_like(seg)
-##    xpos = 0
-##    ypos = 0
-##    for i in range(len(densmap)):
-##        if i >= yedge[ypos]:
-##            ypos+=1
-##        for j in range(len(densmap[0])):
-##            if j>= xedge[xpos]:
-##                xpos+=1
-##            densmap[i,j] = hist[ypos-1,xpos-1]
-##        xpos=0
-    #print hist
-    #print densmap
+##def DensMap(runfile,num,diam = 1.75,drange=.25):
+##    '''code to make density maps and prep for reentry into ArcGIS
+##        Runfile is the current runfile (i.e. gam600bound100//)
+##        num is the panel number
+##        diam is the boulder diameter to use
+##        drange is the +- size of the bin
+##        default settings will get the density of bouldes between 1.5 and 2m
+##        '''
+##    load = getshads(runfile,num)
+##    ys = []
+##    xs = []
+##    if not load:
+##        return
+##    while True:
+##        try:
+##            dat = pickle.load(load)
+##        except(EOFError):
+##            break
+##        if dat.measured and dat.bouldwid_m < diam+drange and dat.bouldwid_m > diam-drange:
+##            ys+=[dat.bouldcent[0]]
+##            xs+=[dat.bouldcent[1]]
 ##    
-##    #smooth the density map
-##
-##    smdensmap = np.copy(densmap)
-##    for i in range(len(densmap)):
-##        for j in range(len(densmap[0])):
-##            smdensmap[i][j] = smooth(densmap,i,j,20)
-            
-    #plt.plot(xs,ys)
-    plt.figure(1)
-    plt.imshow(hist)
-##    plt.figure(2)
-##    plt.imshow(densmap)
-##    plt.figure(3)
-##    plt.imshow(seg)
-    #plt.figure(4)
-    #plt.imshow(smdensmap)
-    plt.show()
-    #return(xedge, yedge)
-    #spm.imsave('%s%s%s_DENS.PNG'%(MBARS.PATH, root, num), densmap)
-    return
+##    hist, yedge, xedge = np.histogram2d(ys,xs,bins=20)
+##    #lets build these data into a smoothed image
+##    seg = np.load('%s%s%s%s_SEG.npy'%(PATH, runfile, FNM,num))
+####    #fix the xedge and yedge beginnings and ends
+####    yedge[0] = 0
+####    xedge[0] = 0
+####    yedge[-1] = len(seg)
+####    xedge[-1] = len(seg[0])
+####    densmap = np.zeros_like(seg)
+####    xpos = 0
+####    ypos = 0
+####    for i in range(len(densmap)):
+####        if i >= yedge[ypos]:
+####            ypos+=1
+####        for j in range(len(densmap[0])):
+####            if j>= xedge[xpos]:
+####                xpos+=1
+####            densmap[i,j] = hist[ypos-1,xpos-1]
+####        xpos=0
+##    #print hist
+##    #print densmap
+####    
+####    #smooth the density map
+####
+####    smdensmap = np.copy(densmap)
+####    for i in range(len(densmap)):
+####        for j in range(len(densmap[0])):
+####            smdensmap[i][j] = smooth(densmap,i,j,20)
+##            
+##    #plt.plot(xs,ys)
+##    plt.figure(1)
+##    plt.imshow(hist)
+####    plt.figure(2)
+####    plt.imshow(densmap)
+####    plt.figure(3)
+####    plt.imshow(seg)
+##    #plt.figure(4)
+##    #plt.imshow(smdensmap)
+##    plt.show()
+##    #return(xedge, yedge)
+##    #spm.imsave('%s%s%s_DENS.PNG'%(MBARS.PATH, root, num), densmap)
+##    return
 
 def OutToGIS(runfile,maxnum,extension='.PGw'):
     '''this code will take an entire run and export the boulder data to a GIS-interpretable format, assume pngs for the moment'''
@@ -1115,15 +1131,10 @@ def OutToGIS(runfile,maxnum,extension='.PGw'):
     '''
     datafile = open("%s%s%s_boulderdata.csv"%(PATH,runfile,FNM),'w')
     #put in the headers, we will start small with the boulders:
-    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m\n'
+    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen\n'
     datafile.write(headers)
     #bring in the original rotation information
-    if NOMAP:
-        rotang = -90-SAZ
-    else:
-        rotang = SAZ-NAZ
-
-    rotang_r = np.radians(rotang)
+    rotang_r = np.radians(ROTANG)
     for i in range(maxnum+1):
         #bring in the image each time, wouldnt have to do this if they were all identical
         #but that cant be gauranteed
@@ -1154,12 +1165,14 @@ def OutToGIS(runfile,maxnum,extension='.PGw'):
             except(EOFError):
                 break
             if dat.measured:
-                #weve got to do something a little tricky here, we need the pixel location of the boulders in the un-rotated images
-                #first we make a pointmap with flags to keep track
-                #boulds+=[dat]
                 flag = dat.flag
                 bouldwid_m = dat.bouldwid_m
                 bouldheight_m = dat.bouldheight_m
+                shadlen = dat.shadlen
+                #weve got to do something a little tricky here, we need the pixel location of the boulders in the un-rotated images
+                #first we make a pointmap with flags to keep track
+                #boulds+=[dat]
+               
                 xpos = dat.bouldcent[1]
                 ypos = dat.bouldcent[0]
 
@@ -1177,7 +1190,7 @@ def OutToGIS(runfile,maxnum,extension='.PGw'):
                 xmap = constants[0]*xpos_rot + constants[2]*ypos_rot + constants[4]
                 ymap = constants[1]*xpos_rot + constants[3]*ypos_rot + constants[5]
                 #write it all down
-                info = '%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m)
+                info = '%s,%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m,shadlen)
                 datafile.write(info)
                 
                 #marks+=[[dat.bouldcent[0],dat.bouldcent[1],dat.flag]]
@@ -1360,7 +1373,11 @@ def ROFL (start, stop, step):
 def getangles(ID, path = REFPATH):
     '''
     input is the product ID of the HiRISE image, returns key observation values:
-    Incedence angle (sun's angle below peak) and sun direction (emission angle of the sun)
+    Incedence angle (sun's angle below peak
+    sun direction (emission angle of the sun, clockwise from right of image)
+    Resolution(m/px)
+    North Azimuth (clockwise north direction from right hand side of image
+    Sun Azimuth (
     '''
     cumindex = open(path+'RDRCUMINDEX.TAB','r')
     for line in cumindex:
@@ -1383,11 +1400,34 @@ def getangles(ID, path = REFPATH):
         Incedence Angle:        20
         North Azimuth:          25
         Sun Azimuth:            26
+        Resolution:             40
+        Projection_type:        41     
     """
+    
     naz = float(dat[25])
     saz = float(dat[26])
     inangle = float(dat[20])
-    sunangle = groundaz(float(dat[29]),float(dat[30]),float(dat[27]),float(dat[28]))
+    glat = float(dat[29])
+    glong = float(dat[30])
+    slat = float(dat[27])
+    slong = float(dat[28])
+    sunangle = groundaz(glat,glong,slat,slong)
+
+    if NOMAP:
+        rotang = 90+saz
+    else:
+        projection = dat[41]
+        projection = projection.replace("\"","")
+        projection = projection.rstrip()
+        if projection == 'EQUIRECTANGULAR':
+            #print 'Map Projection is listed as %s, make sure to project to Equirectangualr projection in GIS before Paneling'%(dat[40])
+            rotang = sunangle
+        elif projection == 'POLAR STEREOGRAPHIC':
+            rotang = -glong+sunangle
+        else:
+            print 'Projection listed as %s, I am error'%(projection)
+            return (None)
+
     ''' Inangle is returned as measured from azimuth, sunangle as clockwise from North'''
     
     #HiRISE_INFO has the resolution, PID is on index 11, resolution on the last one
@@ -1402,7 +1442,10 @@ def getangles(ID, path = REFPATH):
             break
     res = dat[-1].strip()
     res = float(res)
-    return inangle, sunangle, res, naz, saz
+    
+    
+        
+    return inangle, sunangle, res, naz, saz, rotang
 
 def decon_PSF(image, iterations = 10, binned = False):
     '''my kernel for the HiRISE Point Spread Function, used to deconvolve the image
@@ -1555,6 +1598,7 @@ Panels
             answer = raw_input(q2)
             if answer == 'y':
                 mbarsnomap = False
+                
                 break
             elif answer == 'n':
                 mbarsnomap = True
@@ -1586,7 +1630,7 @@ Panels
     
 
 ########INITIALIZATION##########
-INANGLE,SUNANGLE,RESOLUTION,NAZ, SAZ = start()
+INANGLE,SUNANGLE,RESOLUTION,NAZ, SAZ, ROTANG = start()
 
 
     

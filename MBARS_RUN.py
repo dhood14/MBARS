@@ -28,47 +28,21 @@ and numerals at the end, i.e. "root0.PNG" and "root23.PNG"
 ##
 #filename = 'PSP_007718_2350_RED300px'
 filename = 'TRA_000828_2495_RED500PX'
-fullrun =False
-multirun = True
-
-root, MBARS.ID, MBARS.NOMAP,panels = MBARS.RunParams(filename)
-
-MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(root)
-MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ = MBARS.start()
-#MBARS.SUN = [1.,1.]
-
-
-
-#controls go here
-gam = .6
-plot = False
-bound = .1
-#MBARS.NOMAP = False
+#filename = 'ESP_011357_2285_RED300PX'
+#filename = 'PSP_001391_2465_RED500PX'
+plot = True
 #for continuing broken runs, use Startat to specify which panel to begin on for the first run
 startat = 0
+# parameters
+gams = [.6,.6]
+bounds = [.10,.11]
 
+def run(filename,gams,bounds,plot,startat):
 
-#multirun parameters
-gams = [.6,.6,.6]
-bounds = [.09,.10,.11]
-#CFA_results = []
+    root, MBARS.ID, MBARS.NOMAP,panels = MBARS.RunParams(filename)
 
-if fullrun:
-    MBARS.current()
-    for i in range(startat,panels):
-        MBARS.FNM = '%s%s'%(root, i)
-        mod, seg, good, runfile = MBARS.gamfun(gam, plot, bound)
-        #print 'step 1 done'
-        if good:
-            mod = None
-            if any(seg.compressed()):
-                bads = MBARS.boulderdetect(seg,runfile)
-        else:
-            print 'image %s has problems\n'%(i)
-        if i%100 == 0:
-            print '\n===========done %s out of %s==============\n'%(i,panels)
-    
-if multirun:
+    MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(root)
+    MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
 
     for j in range(len(gams)):
         t1 = time.clock()
@@ -82,8 +56,7 @@ if multirun:
                 mod = None
                 if any(seg.compressed()):
                     bads = MBARS.boulderdetect(seg,runfile)
-
-            if i%100 == 0:
+            if i%500 == 0:
                 print '\n===========done %s out of %s==============\n'%(i,panels)
             startat = 0
         t2 = time.clock()
@@ -96,39 +69,10 @@ if multirun:
         for item in string:
             record.write(item)
         record.close()
-else:
-    MBARS.FNM = root+"52"
-    lina, linb, mod, seg = MBARS.gamfun(.5, True, 60, .01)
-    lina = None
-    linb = None
-    mod = None
-    print "finding boulders"
-    im = imagio.imread(MBARS.PATH+MBARS.FNM+MBARS.FLT)
-##    plt.figure(1)
-##    plt.imshow(im[0:500], cmap = "binary_r")
-##    plt.figure(2)
-##    plt.imshow(seg[0:500])
-##    plt.figure(3)
-##    plt.imshow(mod[0:500], cmap = "rainbow")
-##    plt.colorbar()
-##    plt.show()
-    MBARS.boulderdetect(seg)
+    return
+
+run(filename,gams,bounds,plot,startat)
 
 
 
-
-#this is some spot code to make an image that I want
-##
-##load = open(MBARS.PATH+MBARS.FNM+'_shadows.shad', 'rb')
-##for line in load:
-##    x=1
-##eof = load.tell()
-##load = open(MBARS.PATH+MBARS.FNM+'_shadows.shad', 'rb')    
-##while True:
-##    dat = pickle.load(load)
-##    dat.pointsplot()
-##    if load.tell() == eof:
-##        break
-##plt.imshow(mod, cmap='binary_r')
-##plt.show()
 
