@@ -25,15 +25,18 @@ Catch all code to look at results
 #filename = 'PSP_007718_2350_RED300px'
 #filename = 'TRA_000828_2495_RED500PX'
 filename = 'ESP_011357_2285_RED300PX'
+#filename = 'PSP_001391_2465_RED500PX'
+#filename = 'ESP_036437_2290_RED500PX'
 
 MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(filename)
 MBARS.FNM = filename
 root, MBARS.ID, MBARS.NOMAP, num = MBARS.RunParams(filename)
-MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ = MBARS.start()
+MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
 
 
 #######################PICK THE ANALYSES##################
-MakeCFAs = False
+OutToGIS = True
+MakeCFAs = True
 bigs = False
 imageanalysis = True
 #DOES NOT WORK
@@ -51,11 +54,11 @@ runfiles = [f for f in allfiles if 'gam' in f]
 runfiles = [f+'//' for f in runfiles]
 
 #force it into a limited list here:
-runfiles = ['gam600_bound100//']
+runfiles = ['gam600_manbound140//']
 
 
 #controls for examining images & bigs
-trgtfile = 'gam600_bound100//'
+trgtfile = 'gam600_manbound151//'
 maxdiam = 2.25
 #when running exmaine images, do you want to see images with no boulders?
 showblanks = False
@@ -63,6 +66,10 @@ showblanks = False
 
 
 #where the actual work happens
+if OutToGIS:
+    for i in runfiles:
+        MBARS.OutToGIS(i,num)
+
 if MakeCFAs:
     record = file('%s%s_record.csv'%(MBARS.PATH,MBARS.FNM),mode='wb')
     record.write('Filename ,Best Fit Rock Abundance,R^2,Upper limit RA, lower limt RA, maxd=%s\n'%(maxd))
@@ -75,7 +82,7 @@ if MakeCFAs:
     #MBARS.plotCFArefs()
         plt.show()
         record.write('%s,%s,%s,%s,%s\n'%(runfiles[i],fit_k,fit_r2,upfit_k,downfit_k))
-        MBARS.OutToGIS(runfiles[i],num)
+        
     record.close()
     
 

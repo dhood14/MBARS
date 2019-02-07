@@ -52,6 +52,7 @@ RESOLUTION = None
 ROTANG = None
 #MAX EXPECTED BOULDER SIZE, expressed in pixels
 MD = 30
+MH = 30
 MA = np.pi*(MD/2)**2
 #minimum accepted boulder size expressed in pixels
 minA = 4
@@ -70,12 +71,22 @@ def start():
 # imageseg= np array with shadows marked as 0.
 
     
-def gamfun(gam=.6, plot=False, boundfrac=.1):
-    runfile = 'gam%s_bound%s//'%(int(gam*1000),int(boundfrac*1000))
+def gamfun(num,gam=.6, plot=False, boundfrac=.1, manualbound = None):
+    #print(num)
+    #this section causes some errors to pop up between threads, two can try and make it at the same time...
+    if manualbound:
+        runfile = 'gam%s_manbound%s//'%(int(gam*1000),int(manualbound))
+    else:
+        runfile = 'gam%s_bound%s//'%(int(gam*1000),int(boundfrac*1000))
     if not os.path.exists('%s%s'%(PATH,runfile)):
-        os.makedirs('%s%s'%(PATH,runfile))
+        try:
+            os.makedirs('%s%s'%(PATH,runfile))
+        except(WindowsError):
+            #this is in case two threads try and make something at the same time
+            #is it dirty? yes, does it work? also yes.
+            pass
     try:
-       image = imageio.imread('%s%s.PNG'%(PATH,FNM))
+       image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
     except(ValueError, SyntaxError):
         return None, None, False, runfile
     if isinstance(image[0][0], list):
@@ -111,7 +122,7 @@ def gamfun(gam=.6, plot=False, boundfrac=.1):
     shift = np.roll(image.mask,-1,0)
     image.mask = np.logical_or(image.mask, shift)
     
-    image.dump('%s%s%s_rot_masked.npy'%(PATH,runfile,FNM))
+    image.dump('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
     #rotation incurs some kind of offset to the pixel value, meaning much of the area isnt '0' anymore
     #recasting as int may solve this problem
     
@@ -128,6 +139,7 @@ def gamfun(gam=.6, plot=False, boundfrac=.1):
     imagemod = np.zeros_like(image, dtype=np.uint16)
 
     #print("jpg conversion done")
+    
     top = 0.
     imagemod = image**float(gam)
     top = np.max(imagemod)
@@ -147,12 +159,15 @@ def gamfun(gam=.6, plot=False, boundfrac=.1):
     #imagemodlin = imagemod.flatten()
 
     #running the exponential quadratic fit, saves a npy file to send to the next step
-
-    bound = gaussfit(imagemod.compressed(), boundfrac, plot)
-    if bound == None:
-        return None, None, False, runfile
+    if manualbound:
+        bound = float(manualbound)
+        percentage = None
+    else:
+        bound,percentage = gaussfit(imagemod.compressed(), boundfrac, plot)
+        if bound == None:
+            return None, None, False, runfile
     
-    print ("Shadow value boundary at:%s"%(bound))
+    #print ("Shadow value boundary at:%s"%(bound))
 ##    imageseg = np.zeros_like(imagemod, dtype=np.uint32)
 ##    for i in range(len(image)):
 ##        for j in range(len(image[0])):
@@ -162,19 +177,19 @@ def gamfun(gam=.6, plot=False, boundfrac=.1):
     #filling in the values with an impossible number, then putting it all back in
     imageseg = npma.copy(imagemod)
     imageseg = imageseg.astype(float)
-    imageseg = imageseg.filled(bound)
+    imageseg = imageseg.filled(-1)
 
-    imageseg[imageseg>bound] = bound+2
-    imageseg = npma.masked_equal(imageseg, bound)    
+    imageseg[imageseg>bound+1] = bound+1
+    imageseg = npma.masked_equal(imageseg, -1)    
     imageseg = imageseg.astype(int)
     imageseg.fill_value = 0
     
-    imageseg.dump("%s%s%s_SEG.npy"%(PATH,runfile,FNM))
+    imageseg.dump("%s%s%s%s_SEG.npy"%(PATH,runfile,FNM,num))
     #this is the full figure suite, which struggles when you have a big image
     if plot:
         fig,ax = plt.subplots(1,2,sharex = True, sharey = True)
         ax[0].imshow(imagemod, cmap='binary_r', interpolation='none')
-        ax[1].imshow(imageseg,interpolation='none')
+        ax[1].imshow(imageseg,vmax = bound, vmin = bound-1, interpolation='none')
 ##        plt.figure(1)
 ##        plt.title('Gamma stretched image')
 ##        plt.imshow(imagemod, cmap='binary_r')
@@ -230,11 +245,11 @@ def gaussfit(image_lin, boundfrac, plot):
     #bund = mu - sigma*sqrt(-2*ln(boundfraction))
     #solve for the x location where y = bf*ymax
     bound = popt[1] - popt[0]*np.sqrt(-2.*np.log(boundfrac))
+    percentage = 0
+    for i in range(int(bound)):
+        percentage+=odat[i]
+    percentage = 100.*(float(percentage)/float(tot))
     if plot:
-        percentage = 0
-        for i in range(int(bound)):
-            percentage+=odat[i]
-        percentage = 100.*(float(percentage)/float(tot))
         print '%s percent of the image in shadow'%(percentage)
         print sum(ndat)
         plt.plot(bound,max(ndat),'k*')
@@ -243,32 +258,34 @@ def gaussfit(image_lin, boundfrac, plot):
         #plt.plot(sxdat,gauss(sxdat,10,np.argmax(ndat)))
         plt.show()
         
-    return bound
+    return bound,percentage
 
 #########This is the measuring side of things#####################################
-def boulderdetect(image,runfile):
+##def boulderdetect(num,image,runfile):
+##    #current()
+##    makeshadows(num,image,runfile)
+##   
+##    return
 
-    makeshadows(image,runfile)
-   
-    return
-
-def makeshadows(image,runfile):
+def boulderdetect(num,image,runfile):
     #flag must be dtype long, otherwise it will wrap at high numbers and reset the flag to 1
     flag = long(1)
     coords = [0,0]
-    save = open("%s%s%s_shadows.shad"%(PATH,runfile, FNM), 'wb')
+    save = open("%s%s%s%s_shadows.shad"%(PATH,runfile, FNM,num), 'wb')
     im_area = len(image)*(len(image[0]))
     #flagged image has the boulders marked
-    
+    #print 'Running Watershed %s\n'%(num)
     fimage = watershedmethod(image)
     #have to explicitly pass the mask on from the input image
     fimage = npma.masked_array(fimage)
-    fimage.dump('%s%s%s_flagged.npy'%(PATH, runfile,FNM))
+    fimage.dump('%s%s%s%s_flagged.npy'%(PATH, runfile,FNM,num))
     fimage.mask = image.mask
     fmax = np.max(fimage)
     #shadows = []
+    #print 'finding shadows %s \n'%(num)
     shade=None
     for i in range(fmax+1):
+        print 'flag %s image %s\n'%(i,num)
         pixels = np.argwhere(fimage == i)
         #must be converted to list for the neighbor-checking function to work
         pixels = pixels.tolist()
@@ -276,14 +293,56 @@ def makeshadows(image,runfile):
         #pixels = coords[i]
         #print(pixels)
         if len(pixels) >=minA and len(pixels)<MA:
+            print 'found a good one! %s\n'%(num)
             shade = shadow(i, pixels, im_area)
+            print 'run it! %s\n'%(num)
             shade.run()
+            print 'save it! %s'%(num)
             pickle.dump(shade,save)
     save.close()
     #Saves shadow objects to a .shad file for later use.
     return
     #return shadows, coords
 
+def boulderdetect_threadsafe(num,image,runfile,odr_keycard):
+    #flag must be dtype long, otherwise it will wrap at high numbers and reset the flag to 1
+    flag = long(1)
+    coords = [0,0]
+    save = open("%s%s%s%s_shadows.shad"%(PATH,runfile, FNM,num), 'wb')
+    im_area = len(image)*(len(image[0]))
+    #flagged image has the boulders marked
+    #print 'Running Watershed %s\n'%(num)
+    fimage = watershedmethod(image)
+    #have to explicitly pass the mask on from the input image
+    fimage = npma.masked_array(fimage)
+    fimage.dump('%s%s%s%s_flagged.npy'%(PATH, runfile,FNM,num))
+    fimage.mask = image.mask
+    fmax = np.max(fimage)
+    #shadows = []
+    #print 'finding shadows %s \n'%(num)
+    shade=None
+    for i in range(fmax+1):
+        #print 'flag %s image %s\n'%(i,num)
+        pixels = np.argwhere(fimage == i)
+        #must be converted to list for the neighbor-checking function to work
+        pixels = pixels.tolist()
+        #pixels = find(i, image)
+        #pixels = coords[i]
+        #print(pixels)
+        if len(pixels) >=minA and len(pixels)<MA:
+            #print 'found a good one! %s\n'%(num)
+            shade = shadow(i, pixels, im_area)
+            #print 'run it! %s\n'%(num)
+            #broken into 3 steps to narrow the thread-unsafe part into one function
+            shade.run_prep()
+            with odr_keycard:
+                shade.run_fit()
+            shhade.run_post()
+            #print 'save it! %s'%(num)
+            pickle.dump(shade,save)
+    save.close()
+    #Saves shadow objects to a .shad file for later use.
+    return
 def labelsearch(array,i,j):
     #this is a modification of a recursive search function that clears out duplicated labels in the watershed method label array
     for k in [-1,0,1]:
@@ -338,8 +397,109 @@ def watershedmethod(image):
     boulds = skmorph.watershed(image.filled(np.max(image)+1), view.filled(0),mask=~view.mask)
 
     return boulds
-                        
+def overlapcheck(num,runfile,overlap= .1):
+    '''
+    Code to get rid of double-counts in returned boulders, inputs:
+    num - num of target image
+    runfile - current runfile for shad file finding purposes
+    overlap - allowed overlap between boulders, expressed in fraction of boulder area
+    '''
+    shadow_file = getshads(runfile, num,mode='r+')
+    parameters = []
+    while True:
+        try:
+            data = pickle.load(shadow_file)
+        except(EOFError):
+            break
+        #pull in the flag, the y coordiante, the x coordinate, and the width
+        parameters+=[[data.flag,data.bouldcent[0],data.bouldcent[1],data.bouldwid]]
+    #get rid of boudlers with no measurements
+    parameters = [a for a in parameters if a[3]]
+    #sort parameters first by y check for other boulders within range
+    parameters.sort(key=lambda x: x[1])
+    for i in range(len(parameters)):
+        #block unmeasured ones from coming through
+        
+        pos = parameters[i][1]
+        wid = parameters[i][3]
+        parameters[i]+=[touch(parameters,pos,wid,0,1,3,i, True,True)]
+    #sort on xlocation              
+    parameters.sort(key=lambda x: x[2])
+    for i in range(len(parameters)):
+        
+        pos = parameters[i][2]
+        wid = parameters[i][3]
+        parameters[i]+=[touch(parameters,pos,wid,0,2,3,i, True,True)]
+    #now the parameters file has two lists at the end showing the boulders within
+    #the boulder radius from one another, matching those lists give the problem children
+    #sort on the flags now
+    parameters.sort(key=lambda x:x[0])
+    pairs = []
+    #return parameters
+    for i in parameters:
+        yneighbors = i[4]
+        xneighbors = i[5]
+        for j in yneighbors:
+            if j in xneighbors:
+                pairs+=[[i[0],j]]
+    #at this point, pairs is a list of flag pairs that are overlapping
+    #pretty much all of them will be in the list twice
+    #lets organize and remove the doubles
+    for i in range(len(pairs)):
+        #put the smaller flag first for all
+        pairs[i].sort()
 
+    trimmed_pairs = []
+    for i in pairs:
+        if i not in trimmed_pairs:
+            trimmed_pairs+=[i]
+    #organize them all by first flag
+    trimmed_pairs.sort(key=lambda x: x[0])
+
+    webs = []
+    for i in trimmed_pairs:
+        for j in webs:
+            if i[0] in j or i[1] in j:
+                continue
+        web =[i[0],i[1]]
+        web = webfinder(trimmed_pairs,web)
+        webs+=[web]        
+    #now we need to decide what to do with the webs now that they are defined
+        
+                         
+def touch(array,pos,wid,indflag,indpos,indwid,ind, plus=False,minus=False):
+    rad = wid/2.
+    neighborflags = []
+    #check the neighbors
+    try:
+        if (array[ind+1][indpos]-(array[ind+1][indwid])/2.) < (pos+rad) and plus:
+            neighborflags+=[array[ind+1][indflag]]
+            neighborflags+=touch(array,pos,wid,indflag,indpos,indwid,ind+1,True,False)
+    except(IndexError):
+        pass
+    try:
+        if (array[ind-1][indpos]+(array[ind-1][indwid]/2.)) > (pos-rad) and minus:
+            neighborflags+=[array[ind-1][indflag]]
+            neighborflags+=touch(array,pos,wid,indflag,indpos,indwid,ind-1,False,True)
+    except(IndexError):
+        pass
+    return neighborflags
+def webfinder(array,web):
+    oldweb = web
+    for i in web:
+        for j in array:
+            if i in j:
+                for k in j:
+                    if k not in web:
+                        web+=[k]
+    if oldweb != web:
+        web = webfinder(array,web)
+    else:
+        return web
+    
+                
+        
+    
 class shadow(object):
 
     def __init__(self, flag, pixels, im_area):
@@ -402,27 +562,20 @@ class shadow(object):
         #placeholder for the patch object
         self.ellipsepatch = None
 
-    def run(self):
+    def run_prep(self):
         #main function that does most things we want it to do
-        
         
         self.findborder()
         self.mirror()
         
-
-        #to change what kind of border to use during fit, change this argument
-        #self.odrfit()
-        #print'odrfit...'
-        #self.AP_odrfit()
-        #self.AP_odrfit_m()
+    def run_fit(self):
+        #to change the kind of border fit used, alter this line
         self.odrfit_m()
-        
-        if self.fitgood:
-            #self.boulderfit()
-            self.shadowmeasure_m()
 
-        #else:
-            #plotborder(self.border)
+    def run_post(self):
+        if self.fitgood:
+            self.shadowmeasure_m()
+        
     def findborder(self):
         #we will look at each point and see if it has neighbors, if not, there is a border
     
@@ -506,7 +659,8 @@ class shadow(object):
         input_x = list(map(lambda f:f[1], self.border))
         input_dat = [input_y, input_x]
         fit_data = odr.Data(input_dat, y=1)
-        fit_model = odr.Model(self.AP_ellipseINANGLE, implicit=True)
+        fit_model = odr.Model(self.AP_ellipse, implicit=True)
+        
         fit_odr = odr.ODR(fit_data, fit_model, self.AP_fitinit)
         fit_out = fit_odr.run()
         self.fitinfo = str(fit_out.info)
@@ -547,7 +701,9 @@ class shadow(object):
         fit_data = odr.Data(input_dat, y=1)
         fit_model = odr.Model(self.ellipse, implicit=True)
         fit_odr = odr.ODR(fit_data, fit_model, self.fitinit)
+        #print 'doing ODR'
         fit_out = fit_odr.run()
+        #print 'ODR done'
         self.fitinfo = str(fit_out.info)
 
         self.fitbeta = fit_out.beta
@@ -605,6 +761,8 @@ class shadow(object):
         self.bouldwid_m = self.bouldwid*self.resolution
         self.shadlen_m = self.shadlen*self.resolution
         self.bouldheight_m = self.bouldheight*self.resolution
+        if self.bouldwid > MD or self.bouldheight > MH:
+            self.measured = False
         return
         
     def ellipse (self, beta, coords):
@@ -664,17 +822,18 @@ def current():
     print 'Current Filename is: %s'%(FNM)
     print 'current Product ID is: %s'%(ID)
     return
-def getshads(runfile, num, silenced = True):
+def getshads(runfile, num, silenced = True, mode='r'):
     #open and prep a shadow file, returns open file object and endpoint
     #current()
     try:
-        load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num), 'rb')
+        load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num), mode)
     except IOError:
         if not silenced:
             print "No shadow file exists"
         return None
     return load
 def GISprep(runfile,num,mod):
+    '''Deprecated, use OutToGIS() instead'''
     #this takes the target file and makes the necessary  arc documents to plot them
     #assumes that source image and matching arc documents are available in same folder
     #mod is tacked onto the name, SEG will match with segmented images for example
@@ -951,6 +1110,131 @@ def exportdata(runfile,num):
     datfile.close()
     #np.savetxt('%s%s%s_data.csv'%(PATH,FNM,num),attributes, delimiter="'")
     return attributes
+
+def FindIdealParams(filename, oldvals = False):
+    '''Code to identify ideal parameters for running images, will assume single set of values for entire image
+    returns gam,bound
+    '''
+    root, ID, NOMAP, num = RunParams(filename)
+    PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(filename)
+    FNM = filename
+    #first see if it has been run before and offer to use those:
+    if os.path.isfile('%slastrun.txt'%(PATH)):
+        #temporary while testing something else
+        lastrun = open('%slastrun.txt'%(PATH))
+        data = lastrun.readline()
+        data = data.rstrip()
+        oldgam,oldbound = data.split(',')
+        oldgam = float(oldgam)
+        oldbound = float(oldbound)
+        if oldvals:
+            print 'Using old values\n'
+            return oldgam,oldbound
+        prompt = 'Use old params, gam = %s, bound = %s y/n?\n'%(oldgam,oldbound)
+        answer = raw_input(prompt)
+        
+        if answer == 'y':
+            print 'Using old values\n'
+            return oldgam,oldbound
+        else:
+            if answer !='n':
+                print 'Lets assume you meant \'n\''
+            print 'OK, lets make new values\n'
+    while True:
+        imnum = np.random.random_integers(0,num)
+        image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,imnum))
+        print 'Is the following sub-image representative of the entire image?\n'
+        plt.imshow(image, cmap='binary_r')
+        plt.show()
+        answer = raw_input('y/n\n')
+        if answer == 'y':
+            print 'image %s selected, lets get params'%(imnum)
+            break
+        else:
+            print 'trying new image...\n'
+    checkvals = False
+    while checkvals:
+        gams = np.linspace(.1,1,10)
+        bounds = np.logspace(-3,0,20)
+        results = []
+        for i in gams:
+            for j in bounds:
+                image = npma.masked_equal(image, 0)
+                imagemod = np.zeros_like(image, dtype=np.uint16)
+                top = 0.
+                imagemod = image**float(i)
+                top = np.max(imagemod)
+                scale = 255./top
+                imagemod = imagemod*scale
+                imagemod = imagemod.astype(int)
+                bound,percentage = gaussfit(imagemod.compressed(), j, False)
+                results += [[i,j,bound,percentage]]
+        gamvals = [a[0] for a in results]
+        fracvals = [a[1] for a in results]
+        boundvals = [a[2] for a in results]
+        percvals = [a[3] for a in results]
+        fig,ax = plt.subplots(2,2)
+        ax[0][0].scatter(gamvals,boundvals,c = 'g', marker = '*')
+        ax[0][1].scatter(gamvals,percvals,c = 'b',marker = '*')
+        ax[1][0].scatter(fracvals,boundvals,c = 'g',marker= '*')
+        #ax[1][0].xscale('log')
+        ax[1][1].scatter(fracvals,percvals,c = 'b',marker='*')
+        #ax[1][1].xscale('log')
+        plt.show()
+        
+    userinterp = True
+    while userinterp:
+        gam = .6 
+        image = npma.masked_equal(image, 0)
+        imagemod = np.zeros_like(image, dtype=np.uint16)
+        top = 0.
+        imagemod = image**float(gam)
+        top = np.max(imagemod)
+        scale = 255./top
+        imagemod = imagemod*scale
+        imagemod = imagemod.astype(int)
+        bound = int(np.average(imagemod.compressed()))
+        while True:
+            imageseg = npma.copy(imagemod)
+            imageseg = imageseg.astype(float)
+            imageseg = imageseg.filled(-1)
+            imageseg[imageseg>bound] = bound
+            imageseg = npma.masked_equal(imageseg, -1)    
+            imageseg = imageseg.astype(int)
+            imageseg.fill_value = 0
+            print ('Boundary at %s\n'%(bound))
+            print ('(I)ncrease or (D)ecrease the boundary? or is it (C)orrect?\n')
+            fig,ax = plt.subplots(1,2,sharex = True,sharey = True)
+            ax[0].imshow(image,cmap = 'binary_r')
+            ax[1].imshow(image,cmap = 'binary_r',alpha = .5, zorder = 1)
+            ax[1].imshow(imageseg,vmin = (bound-1),vmax = bound, zorder = 0)
+            plt.show()
+            prompt = 'I,D,C?\n'
+            answer = raw_input(prompt)
+            if answer == 'C' or answer == 'c':
+                save = open('%slastrun.txt'%(PATH),'w')
+                save.write('%s,%s'%(gam,bound))
+                return gam,bound
+            prompt = 'Move by how much? (integer please)\n'
+            size = raw_input(prompt)
+            try:
+                size = int(size)
+            except(ValueError):
+                print 'that was not an int'
+                size = 5
+            
+            if answer == 'I' or answer == 'i':
+                bound+=size
+            else:
+                bound-= size
+            
+                
+            
+
+
+
+    return gam,bound
+    
     
 def ExamineImage(runfile,num, showblanks):
     hasshads = True
@@ -983,6 +1267,11 @@ def ExamineImage(runfile,num, showblanks):
         for j in patches2:
             ax[1][1].add_patch(j)
         plt.show()
+##        plt.figure(1)
+##        plt.imshow(image)
+##        plt.figure(2)
+##        plt.imshow(sktrans.rotate(image, -ROTANG))
+##        plt.show()
     elif showblanks:
         image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
         filtimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
@@ -1050,72 +1339,9 @@ def FindExcluded(runfile,maxnum,maxdiam):
     print ('%s boulders found in image, %s percent ignored due to diameter'%(total,exclpercent))
     return
     
-##def DensMap(runfile,num,diam = 1.75,drange=.25):
-##    '''code to make density maps and prep for reentry into ArcGIS
-##        Runfile is the current runfile (i.e. gam600bound100//)
-##        num is the panel number
-##        diam is the boulder diameter to use
-##        drange is the +- size of the bin
-##        default settings will get the density of bouldes between 1.5 and 2m
-##        '''
-##    load = getshads(runfile,num)
-##    ys = []
-##    xs = []
-##    if not load:
-##        return
-##    while True:
-##        try:
-##            dat = pickle.load(load)
-##        except(EOFError):
-##            break
-##        if dat.measured and dat.bouldwid_m < diam+drange and dat.bouldwid_m > diam-drange:
-##            ys+=[dat.bouldcent[0]]
-##            xs+=[dat.bouldcent[1]]
-##    
-##    hist, yedge, xedge = np.histogram2d(ys,xs,bins=20)
-##    #lets build these data into a smoothed image
-##    seg = np.load('%s%s%s%s_SEG.npy'%(PATH, runfile, FNM,num))
-####    #fix the xedge and yedge beginnings and ends
-####    yedge[0] = 0
-####    xedge[0] = 0
-####    yedge[-1] = len(seg)
-####    xedge[-1] = len(seg[0])
-####    densmap = np.zeros_like(seg)
-####    xpos = 0
-####    ypos = 0
-####    for i in range(len(densmap)):
-####        if i >= yedge[ypos]:
-####            ypos+=1
-####        for j in range(len(densmap[0])):
-####            if j>= xedge[xpos]:
-####                xpos+=1
-####            densmap[i,j] = hist[ypos-1,xpos-1]
-####        xpos=0
-##    #print hist
-##    #print densmap
-####    
-####    #smooth the density map
-####
-####    smdensmap = np.copy(densmap)
-####    for i in range(len(densmap)):
-####        for j in range(len(densmap[0])):
-####            smdensmap[i][j] = smooth(densmap,i,j,20)
-##            
-##    #plt.plot(xs,ys)
-##    plt.figure(1)
-##    plt.imshow(hist)
-####    plt.figure(2)
-####    plt.imshow(densmap)
-####    plt.figure(3)
-####    plt.imshow(seg)
-##    #plt.figure(4)
-##    #plt.imshow(smdensmap)
-##    plt.show()
-##    #return(xedge, yedge)
-##    #spm.imsave('%s%s%s_DENS.PNG'%(MBARS.PATH, root, num), densmap)
-##    return
 
-def OutToGIS(runfile,maxnum,extension='.PGw'):
+
+def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 2.25,extension='.PGw'):
     '''this code will take an entire run and export the boulder data to a GIS-interpretable format, assume pngs for the moment'''
     ''' A key part of this is interpreting the PGW files, which follow this convention:
         6 values on 6 lines:
@@ -1129,10 +1355,14 @@ def OutToGIS(runfile,maxnum,extension='.PGw'):
         xmap = Ax + By +C
         ymap = Dx + Ey +F
     '''
-    datafile = open("%s%s%s_boulderdata.csv"%(PATH,runfile,FNM),'w')
+    if not os.path.exists('%sGISFiles//%s'%(PATH,runfile)):
+        os.makedirs('%sGISFiles//%s'%(PATH,runfile))
+    datafile = open("%sGISFiles//%s%s_boulderdata.csv"%(PATH,runfile,FNM),'w')
+    datafile2 = open("%sGISFiles//%s%s_DEFINITEboulderdata.csv"%(PATH,runfile,FNM),'w')
     #put in the headers, we will start small with the boulders:
     headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen\n'
     datafile.write(headers)
+    datafile2.write(headers)
     #bring in the original rotation information
     rotang_r = np.radians(ROTANG)
     for i in range(maxnum+1):
@@ -1142,6 +1372,9 @@ def OutToGIS(runfile,maxnum,extension='.PGw'):
             seg = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,i))
         except(IOError):
             continue
+        shads = getshads(runfile,i)
+        if not shads:
+            continue
         lycent = len(seg)/2.
         lxcent = len(seg[0])/2.
         seg = None
@@ -1149,9 +1382,7 @@ def OutToGIS(runfile,maxnum,extension='.PGw'):
         o_lycent = len(o_image)/2.
         o_lxcent = len(o_image[0])/2.
         o_image = None
-        shads = getshads(runfile,i)
-        if not shads:
-            continue
+        
         worldfile = open('%s%s%s%s'%(PATH,FNM,i,extension),'r')
         constants = []
         for line in worldfile:
@@ -1181,8 +1412,8 @@ def OutToGIS(runfile,maxnum,extension='.PGw'):
                 ypos_c = ypos-lycent
 
                 #rotate them, must give the negative rotation
-                xpos_rot_c = xpos_c*np.cos(-rotang_r) - ypos_c*np.sin(-rotang_r)
-                ypos_rot_c = xpos_c*np.sin(-rotang_r) + ypos_c*np.cos(-rotang_r)
+                xpos_rot_c = xpos_c*np.cos(rotang_r) - ypos_c*np.sin(rotang_r)
+                ypos_rot_c = xpos_c*np.sin(rotang_r) + ypos_c*np.cos(rotang_r)
 
                 #re-reference to the corner of the image
                 xpos_rot = xpos_rot_c + o_lxcent
@@ -1192,56 +1423,11 @@ def OutToGIS(runfile,maxnum,extension='.PGw'):
                 #write it all down
                 info = '%s,%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m,shadlen)
                 datafile.write(info)
+                if bouldwid_m < dhigh and bouldwid_m >dlow:
+                    datafile2.write(info)
                 
-                #marks+=[[dat.bouldcent[0],dat.bouldcent[1],dat.flag]]
-                #x = dat.bouldcent[1]
-                #y = dat.bouldcent[0]
-
-        
-
-            
-##        #bring in seg as a dummy to get parameters from
-##        seg = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,i))
-##        pointmap = npma.copy(seg)
-##        seg = None
-##        pointmap.fill(0)
-##        #mark the image (in sun-up orientation) with flags
-##        for k in marks:
-##            print k
-##            y = k[0]
-##            x = k[1]
-##            pointmap[y][x] = k[2]
-##            
-##        #rotate the image back to the north-up orientation
-##        pointmap_UR = npma.copy(pointmap)
-##        if NOMAP:
-##            rotang = -90-SAZ
-##        else:
-##            rotang = SAZ-NAZ
-##        pointmap_UR = sktrans.rotate(pointmap_UR,rotang,resize = False, preserve_range=True)
-##        #fetch the original image to get the crops right
-##        o_image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,i))
-##        cropy = (len(pointmap_UR)-len(o_image))/2
-##        cropx = (len(pointmap_UR[0])-len(o_image[0]))/2
-##        pointmap_UR = skutil.crop(pointmap_UR,((cropy,cropy),(cropx,cropx)))
-##        #only for checking purposes:
-##        imageio.imsave('%s%s%s%_pointmap.png'%(PATH,runfile,FNM,i),pointmap_UR)
-##        for j in range(len(pointmap_UR)):
-##            for h in range(len(pointmap_UR[j])):
-##                for rocks in boulds:
-##                    val = pointmap_UR[j][h]
-##                    if val == rocks.flag:
-##                        flag = rocks.flag
-##                        bouldwid_m = rocks.bouldwid_m
-##                        bouldheight_m = rocks.bouldheight_m
-##                        #ok, find the flag back in the image, ill put in some hacky code to avoid the edges for now:
-##                        x = h
-##                        y = j
-##                        xmap = constants[0]*x + constants[2]*y + constants[4]
-##                        ymap = constants[1]*x + constants[3]*y + constants[5]
-##                        
-##                        info = '%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m)
-##                        datafile.write(info)
+                
+                
     datafile.close()
     return
             
