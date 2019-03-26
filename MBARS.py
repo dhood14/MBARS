@@ -22,6 +22,7 @@ import skimage.morphology as skmorph
 import skimage.filters.rank as skrank
 import skimage.restoration as skrestore
 import skimage.util as skutil
+import sklearn.cluster as skcluster
 from scipy.ndimage import filters
 import scipy.stats as sps
 import imageio
@@ -88,7 +89,7 @@ def gamfun(num,gam=.6, plot=False, boundfrac=.1, manualbound = None):
     try:
        image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
     except(ValueError, SyntaxError):
-        return None, None, False, runfile
+        return None, False, runfile
     if isinstance(image[0][0], list):
          #Black and White PNGs store three (identical) values per pixel, this flattens pngs into a 2-D array
         imagetemp = np.zeros((len(image),len(image[0])),dtype=np.uint16)
@@ -122,7 +123,7 @@ def gamfun(num,gam=.6, plot=False, boundfrac=.1, manualbound = None):
     shift = np.roll(image.mask,-1,0)
     image.mask = np.logical_or(image.mask, shift)
     
-    image.dump('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+    #image.dump('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
     #rotation incurs some kind of offset to the pixel value, meaning much of the area isnt '0' anymore
     #recasting as int may solve this problem
     
@@ -130,22 +131,24 @@ def gamfun(num,gam=.6, plot=False, boundfrac=.1, manualbound = None):
     
    
     pixels = len(image)*len(image[0])
-    imagelin = image.flatten()
+    #not used anywhere else
+    #imagelin = image.flatten()
 
     if not np.any(image.compressed()):
-        return None, None, False, runfile
+        return None, False, runfile
 
     #do the actual gamma correction,
-    imagemod = np.zeros_like(image, dtype=np.uint16)
+    #imagemod = np.zeros_like(image, dtype=np.uint16)
+    #removed to reduce memeory use
 
     #print("jpg conversion done")
     
     top = 0.
-    imagemod = image**float(gam)
-    top = np.max(imagemod)
+    image = image**float(gam)
+    top = np.max(image)
     scale = 255./top
-    imagemod = imagemod*scale
-    imagemod = imagemod.astype(int)
+    image = image*scale
+    image = image.astype(int)
 
     
     #print("image modification done")
@@ -165,7 +168,7 @@ def gamfun(num,gam=.6, plot=False, boundfrac=.1, manualbound = None):
     else:
         bound,percentage = gaussfit(imagemod.compressed(), boundfrac, plot)
         if bound == None:
-            return None, None, False, runfile
+            return None, False, runfile
     
     #print ("Shadow value boundary at:%s"%(bound))
 ##    imageseg = np.zeros_like(imagemod, dtype=np.uint32)
@@ -175,7 +178,7 @@ def gamfun(num,gam=.6, plot=False, boundfrac=.1, manualbound = None):
 ##                imageseg[i][j]=1
     #doing the indexing in the fastest way always passes the mask, so we are unmasking
     #filling in the values with an impossible number, then putting it all back in
-    imageseg = npma.copy(imagemod)
+    imageseg = npma.copy(image)
     imageseg = imageseg.astype(float)
     imageseg = imageseg.filled(-1)
 
@@ -188,7 +191,7 @@ def gamfun(num,gam=.6, plot=False, boundfrac=.1, manualbound = None):
     #this is the full figure suite, which struggles when you have a big image
     if plot:
         fig,ax = plt.subplots(1,2,sharex = True, sharey = True)
-        ax[0].imshow(imagemod, cmap='binary_r', interpolation='none')
+        ax[0].imshow(image, cmap='binary_r', interpolation='none')
         ax[1].imshow(imageseg,vmax = bound, vmin = bound-1, interpolation='none')
 ##        plt.figure(1)
 ##        plt.title('Gamma stretched image')
@@ -205,7 +208,7 @@ def gamfun(num,gam=.6, plot=False, boundfrac=.1, manualbound = None):
         good = False
     else:
         good=True
-    return(imagemod, imageseg, good ,runfile)
+    return(imageseg, good ,runfile)
 
 
 #this method uses a gaussian fit to the data to find the shadow boundary
@@ -337,7 +340,7 @@ def boulderdetect_threadsafe(num,image,runfile,odr_keycard):
             shade.run_prep()
             with odr_keycard:
                 shade.run_fit()
-            shhade.run_post()
+            shade.run_post()
             #print 'save it! %s'%(num)
             pickle.dump(shade,save)
     save.close()
@@ -397,14 +400,16 @@ def watershedmethod(image):
     boulds = skmorph.watershed(image.filled(np.max(image)+1), view.filled(0),mask=~view.mask)
 
     return boulds
-def overlapcheck(num,runfile,overlap= .1):
+def overlapcheck_threadsafe(num,runfile,odr_keycard,overlap= .1):
     '''
     Code to get rid of double-counts in returned boulders, inputs:
     num - num of target image
     runfile - current runfile for shad file finding purposes
     overlap - allowed overlap between boulders, expressed in fraction of boulder area
     '''
-    shadow_file = getshads(runfile, num,mode='r+')
+    shadow_file = getshads(runfile, num,mode='r')
+    if shadow_file == None:
+        return
     parameters = []
     while True:
         try:
@@ -415,6 +420,8 @@ def overlapcheck(num,runfile,overlap= .1):
         parameters+=[[data.flag,data.bouldcent[0],data.bouldcent[1],data.bouldwid]]
     #get rid of boudlers with no measurements
     parameters = [a for a in parameters if a[3]]
+    #If inserting DBSCAN, start here
+    
     #sort parameters first by y check for other boulders within range
     parameters.sort(key=lambda x: x[1])
     for i in range(len(parameters)):
@@ -422,14 +429,18 @@ def overlapcheck(num,runfile,overlap= .1):
         
         pos = parameters[i][1]
         wid = parameters[i][3]
+        
         parameters[i]+=[touch(parameters,pos,wid,0,1,3,i, True,True)]
+        
     #sort on xlocation              
     parameters.sort(key=lambda x: x[2])
     for i in range(len(parameters)):
         
         pos = parameters[i][2]
         wid = parameters[i][3]
+        
         parameters[i]+=[touch(parameters,pos,wid,0,2,3,i, True,True)]
+        
     #now the parameters file has two lists at the end showing the boulders within
     #the boulder radius from one another, matching those lists give the problem children
     #sort on the flags now
@@ -444,6 +455,9 @@ def overlapcheck(num,runfile,overlap= .1):
                 pairs+=[[i[0],j]]
     #at this point, pairs is a list of flag pairs that are overlapping
     #pretty much all of them will be in the list twice
+    #remove ones with no overlaps
+    if len(pairs) == 0:
+        return
     #lets organize and remove the doubles
     for i in range(len(pairs)):
         #put the smaller flag first for all
@@ -456,35 +470,147 @@ def overlapcheck(num,runfile,overlap= .1):
     #organize them all by first flag
     trimmed_pairs.sort(key=lambda x: x[0])
 
-    webs = []
+    new_webs = []
+    #re-thinking this
+    
     for i in trimmed_pairs:
-        for j in webs:
-            if i[0] in j or i[1] in j:
-                continue
-        web =[i[0],i[1]]
-        web = webfinder(trimmed_pairs,web)
-        webs+=[web]        
-    #now we need to decide what to do with the webs now that they are defined
+        web = [i[0],i[1]]
+        for j in trimmed_pairs:
+            if j[0] or j[1] in web:
+                web+=[j[0],j[1]]
+        new_webs+=[list(set(web))]
+        #this results in a list of webs that are unordered but made of unique objects
+    for i in new_webs:
+        i.sort()
+    #new_webs.sort(key=lambda x: x[0])
+    webs = []
+    for i in new_webs:
+        if i not in webs:
+            webs+=[i]
+    
+                
+##    for i in trimmed_pairs:
+##        for j in webs:
+##            if i[0] in j or i[1] in j:
+##                continue
+##        web =[i[0],i[1]]
+##        web = webfinder(trimmed_pairs,web)
+##        webs+=[web]
+#    print webs
+    #now lets re-read in the shadow data
+    shadow_file.seek(0)
+    og_data = []
+    while True:
+        try:
+            og_data+=[pickle.load(shadow_file)]
+        except(EOFError):
+            break
+    #close and re-open for re-writing
+    shadow_file.close()
+    shadow_file = getshads(runfile,num,mode='w')
+    #get a flat list of the webbed boulders
+    webs_flat = [a for sublist in webs for a in sublist]
+    problem_boulders = []
+    for i in og_data:
+        if i.flag in webs_flat:
+            problem_boulders+=[i]
+        else:
+            pickle.dump(i,shadow_file)
+    og_data = None
+
+    #OK with just the problem_boulders list, we can do the work
+    for subweb in webs:
+        #print subweb
+        current_web = []
+        #take the web list (which is just flags) and make a list of shadow objects
+        for bould in problem_boulders:
+            if bould.flag in subweb:
+                current_web+=[bould]
+        
+        
+        #merge = True
+        while True:
+            #print 'Current_web length: %s'%(len(current_web))
+            #reset to no merge
+            merge = False
+            #current_web = newboulds
+            newboulds = []
+            for a in current_web:
+                if merge:
+                    continue
+                #A_flag = j.flag
+                for b in current_web:
+                    if merge:
+                        continue
+                    #B_flag = k.flag
+                    if a.flag != b.flag:
+                        #look for overlapping pairs in the web
+                        area = checkpos(a,b)
+                        
+                        if area > overlap:
+                            #if they overlap too much, make a new shadow that combines their pixels and re-run
+                            newbould=shadow(a.flag, a.pixels+b.pixels, a.im_area)
+                            newbould.run_prep()
+                            with odr_keycard:
+                                newbould.run_fit()
+                            newbould.run_post()
+                            #you found two that needed to merge
+                            A_flag = a.flag
+                            B_flag = b.flag 
+                            #print 'Merged %s and %s'%(A_flag,B_flag)
+                            merge = True
+            if merge:
+                #since you found two that merged, dont add them to the next web and put the new one in
+                
+                for bould in current_web:
+                    if bould.flag != A_flag and bould.flag != B_flag:
+                        newboulds+=[bould]
+                        #print bould.flag
+                newboulds+=[newbould]
+                current_web = newboulds
+            else:
+                break
+                
+                
+            #if no merges are found in the inner loops, the code will continue to the next web
+        #now save all these new ones you just made
+        for boulder in current_web:
+            #print'Dumping shadows'
+            pickle.dump(boulder,shadow_file)
+    shadow_file.close()
+    return
+        
+                        
+                        
+                
         
                          
 def touch(array,pos,wid,indflag,indpos,indwid,ind, plus=False,minus=False):
+    '''Corrolary to the above overlap check function '''
     rad = wid/2.
     neighborflags = []
     #check the neighbors
     try:
         if (array[ind+1][indpos]-(array[ind+1][indwid])/2.) < (pos+rad) and plus:
             neighborflags+=[array[ind+1][indflag]]
-            neighborflags+=touch(array,pos,wid,indflag,indpos,indwid,ind+1,True,False)
+            try:
+                neighborflags+=touch(array,pos,wid,indflag,indpos,indwid,ind+1,True,False)
+            except(RuntimeError):
+                pass
     except(IndexError):
         pass
     try:
         if (array[ind-1][indpos]+(array[ind-1][indwid]/2.)) > (pos-rad) and minus:
             neighborflags+=[array[ind-1][indflag]]
-            neighborflags+=touch(array,pos,wid,indflag,indpos,indwid,ind-1,False,True)
+            try:
+                neighborflags+=touch(array,pos,wid,indflag,indpos,indwid,ind-1,False,True)
+            except(RuntimeError):
+                pass
     except(IndexError):
         pass
     return neighborflags
 def webfinder(array,web):
+    '''Corrolary to the overlap check function '''
     oldweb = web
     for i in web:
         for j in array:
@@ -496,6 +622,51 @@ def webfinder(array,web):
         web = webfinder(array,web)
     else:
         return web
+def checkpos(shadow1,shadow2):
+    '''expects two shadow objects , checks how much they overlap
+    returns a fraction of the area of the smaller boulder overlapped by the larger
+    '''
+    bouldwid1 = shadow1.bouldwid
+    bouldwid2 = shadow2.bouldwid
+
+    pos1 = shadow1.bouldcent
+    pos2 = shadow2.bouldcent
+    #if one is unmeasured or has no dimensions, forget it
+    if pos1[0] == None or pos2[0] == None:
+        return 0.
+    #distance between the two circles
+    d = np.sqrt((pos1[0]-pos2[0])**2+(pos1[1]-pos2[1])**2)
+    r1 = bouldwid1/2.
+    r2 = bouldwid2/2.
+    if r1>=r2:
+        ra = r1
+        rb = r2
+    else:
+        ra = r2
+        rb = r1
+    #lets throw out some simple scenarios
+    #the circles exactly reach or do not overlap
+    if d>= ra+rb:
+        return 0.
+    #if the smaller is fully in the larger:
+    if d+rb <=ra:
+        return 1.
+    #if the center of one is within the other, but not entirely
+    if ra>d and d+rb>ra:
+        #returning 1 beccause I always want these to merge
+        return 1.
+    else:
+        #note: all this work is done in pixels not meters
+        x = (ra**2 - rb**2 + d**2)/(2*d)
+        y = np.sqrt(ra**2+x**2)
+        #note: this returns in radians
+        thetaA = np.arccos(x/ra)
+        thetaB = np.arccos((d-x)/rb)
+        #relevant EQ, area of circle slice: piR^2*(2theta/2pi), triangle .5*b*h
+        area = (ra**2)*thetaA - x*y + (rb**2)*thetaB - (d-x)*y
+        area = area/(np.pi*rb**2)
+        return area
+    
     
                 
         
@@ -521,7 +692,7 @@ class shadow(object):
         #image resolution, tied to each shadow image for safekeeping
         self.resolution = RESOLUTION
         #image area (pixels^2) tied to each shadow for safekeeping
-        self.area = im_area
+        self.im_area = im_area
         #find the center of the shadow
         tempx = 0.
         tempy = 0.
@@ -831,6 +1002,10 @@ def getshads(runfile, num, silenced = True, mode='r'):
         if not silenced:
             print "No shadow file exists"
         return None
+    except:
+        if not silenced:
+            print'Likely broken file'
+        return None
     return load
 def GISprep(runfile,num,mod):
     '''Deprecated, use OutToGIS() instead'''
@@ -841,7 +1016,7 @@ def GISprep(runfile,num,mod):
     shutil.copyfile('%s%s%s.PNG.aux.xml'%(PATH,FNM,num),'%s%s%s%s_%s.PNG.aux.xml'%(PATH,runfile,FNM,num,mod))
     ###OVRs are just pyramid data, dont need to copy those
     ##shutil.copyfile('%s%s%s.PNG.ovr'%(PATH,FNM,num),'%s%s%s%s_%s.PNG.ovr'%(PATH,runfile,FNM,num,mod))
-def bulkCFA(runfile,maxnum,maxd,root):
+def bulkCFA(runfile,maxnum,maxd,fitmaxd,root):
     ''' runs the CFA protocol on a bunch of files and gives an average
 '''
     #set value for maximum on plots (in meters)
@@ -859,11 +1034,12 @@ def bulkCFA(runfile,maxnum,maxd,root):
                 
             except(IOError):
                 continue
-            try:
-                plt.plot(dat[1],dat[0],'b-',alpha=.05)
-            except(IndexError):
-                print 'failed on %s'%(i)
-                continue
+##            try:
+##                #plt.plot(dat[1],dat[0],'b-',alpha=.05)
+##                pass
+##            except(IndexError):
+##                print 'failed on %s'%(i)
+##                continue
             allCFAs+=[dat]
         if allCFAs == []:
             print "No CDFs Present"
@@ -877,7 +1053,7 @@ def bulkCFA(runfile,maxnum,maxd,root):
             #[3] = Upper bound error CFA
             dat = CFA(runfile,i, maxd)
             #Keep an eye on this, would break quickly if CFA is changed
-            if len(dat) == 4:
+            if len(dat) == 3:
                 #plt.plot(dat[0],dat[2],'b-',alpha=.05)
                 allCFAs+=[dat]
                 #print len(dat)
@@ -885,34 +1061,56 @@ def bulkCFA(runfile,maxnum,maxd,root):
 ##    if not any(allCFAs):
 ##        return None, None
     #extract bins and the three CFAs (upCFAs = upper end of CFA uncertainty, downCFAs lower end of uncertainty)
+    #above method is being revised, shifting to a sigma calculation
     bins = allCFAs[0][0]
     allCFAs = np.array(allCFAs)
-    CFAs = allCFAs[:,2]
-    upCFAs = allCFAs[:,1]
-    downCFAs = allCFAs[:,3]
+    #CFAs = allCFAs[:,2]
+    #upCFAs = allCFAs[:,1]
+    #downCFAs = allCFAs[:,3]
+    CFAs = allCFAs[:,1]
+    CFAsigmas = allCFAs[:,2]
     #tranpose the files to go from (image,bins) to (bins,image) format
     T_CFAs = np.transpose(CFAs)
-    T_upCFAs = np.transpose(upCFAs)
-    T_downCFAs = np.transpose(downCFAs)
+    T_CFAsigmas = np.transpose(CFAsigmas)
+    #T_upCFAs = np.transpose(upCFAs)
+    #T_downCFAs = np.transpose(downCFAs)
     #average accross bins, results in 1-D array of length 'bins'
+    #also fetch a 25% and 75% CFA curve
     avgCFAs = map(np.average,T_CFAs)
-    avgupCFAs = map(np.average,T_upCFAs)
-    avgdownCFAs = map(np.average,T_downCFAs)
+    topqCFAs = map(lambda x: np.percentile(x,75),T_CFAs)
+    botqCFAs = map(lambda x: np.percentile(x,25),T_CFAs)
+    avgCFAsigmas = []
+    
+    for i in T_CFAsigmas:
+        sigma = (1/float(len(i)))*(np.sqrt(sum(map(lambda x: x**2,i))))
+        avgCFAsigmas+=[sigma]
+    avgupCFAs = []
+    avgdownCFAs = []
+    for i in range(len(avgCFAs)):
+        avgupCFAs+=[avgCFAs[i]+avgCFAsigmas[i]]
+        avgdownCFAs+=[avgCFAs[i]-avgCFAsigmas[i]]
+    #avgupCFAs = map(np.average,T_upCFAs)
+    #avgdownCFAs = map(np.average,T_downCFAs)
 ##    print bins
 ##    print CFAs
 ##    print upCFAs
 ##    print downCFAs
     #fit to each end of the spectrum
-    fit_k, fit_r2 = fittoRA(bins,avgCFAs, [1.5,maxd])
-    upfit_k, upfit_r2 = fittoRA(bins,avgupCFAs, [1.5,maxd])
-    downfit_k, downfit_r2 = fittoRA(bins,avgdownCFAs, [1.5,maxd])
-
+    fit_k, fit_r2 = fittoRA(bins,avgCFAs, [1.5,fitmaxd])
+    #upfit_k, upfit_r2 = fittoRA(bins,avgupCFAs, [1.5,maxd])
+    #downfit_k, downfit_r2 = fittoRA(bins,avgdownCFAs, [1.5,maxd])
+    upfit_k, upfit_r2 = fittoRA(bins,avgupCFAs, [1.5,fitmaxd])
+    downfit_k, downfit_r2 = fittoRA(bins,avgdownCFAs, [1.5,fitmaxd])
+    topqfit_k, topqft_r2 = fittoRA(bins,topqCFAs,[1.5,fitmaxd])
+    botqfit_k, botqft_r2 = fittoRA(bins,botqCFAs,[1.5,fitmaxd])
     
     #calculate RA for each side of uncertainty
     fit_bins = np.linspace(min(bins),max(bins),100)
     fitRA = GolomPSDCFA(fit_bins,fit_k)
     upfitRA = GolomPSDCFA(fit_bins,upfit_k)
     downfitRA = GolomPSDCFA(fit_bins,downfit_k)
+    topqfitRA = GolomPSDCFA(fit_bins,topqfit_k)
+    botqfitRA = GolomPSDCFA(fit_bins,botqfit_k)
 
     #plot them all!
     #errors in format of array [2,bins] all must be positive, lower errors first, see matplotlib API
@@ -920,10 +1118,11 @@ def bulkCFA(runfile,maxnum,maxd,root):
     errors+=[fitRA-downfitRA]
     errors+=[upfitRA-fitRA]
     #plots stack in reverse, so plot what you want on top first (I think...)
-    plt.plot(bins,avgCFAs, 'gs',label = root,zorder=3)
+    plt.errorbar(bins,avgCFAs,label = root,zorder=3, yerr = avgCFAsigmas,fmt = 'none', ecolor = 'g', c = 'g', marker='|')
     
     plt.errorbar(fit_bins,fitRA,zorder=2,label = 'RA Envelope',yerr = errors,ecolor = 'k',c = 'k',marker='|',alpha=.5)
-    
+    plt.plot(fit_bins,topqfitRA,zorder=3,label = '75th Percentile RA')
+    plt.plot(fit_bins,botqfitRA,zorder=3,label = '25th Percentile RA')
     plotCFArefs(plotmax)
     plt.xscale('log')
     plt.yscale('log')
@@ -934,8 +1133,32 @@ def bulkCFA(runfile,maxnum,maxd,root):
     plt.legend(loc=3)
     plt.title('CFA for image %s at parameters %s'%(root,runfile))
     plt.savefig('%s%sCFAPlot.png'%(PATH,runfile))
+
+    #save the CFA data:
+    savecfa = open('%s%sCFAdata_maxd_%s_fitmaxd_%s.csv'%(PATH,runfile,maxd,fitmaxd),'w')
+    savecfa.write('Bins,')
+    for i in bins:
+        savecfa.write('%s,'%i)
+    savecfa.write('\n')
+    savecfa.write('avgCFA,')
+    for i in avgCFAs:
+        savecfa.write('%s,'%i)
+    savecfa.write('\n')
+    savecfa.write('sigma,')
+    for i in avgCFAsigmas:
+        savecfa.write('%s,'%i)
+    savecfa.write('\n')
+    savecfa.write('topq,')
+    for i in topqCFAs:
+        savecfa.write('%s,'%i)
+    savecfa.write('\n')
+    savecfa.write('botq,')
+    for i in botqCFAs:
+        savecfa.write('%s,'%i)
+    savecfa.write('\n')
+    savecfa.close()
     #plt.show()
-    return fit_k,upfit_k,downfit_k, fit_r2
+    return fit_k,topqfit_k,botqfit_k, fit_r2
     
 def CFA(runfile,num,maxd):
     #Produces data for Cumulative Fractional Area, saves and produces plot
@@ -953,33 +1176,37 @@ def CFA(runfile,num,maxd):
             sizes+=[dat.bouldwid_m]
     
             res = dat.resolution
+            #may need to re-run some boulder detection to get this into the shad file
+            #im_area = dat.im_area
     if not any(sizes):
         return [None]
-    #im = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
-    #this is silly to reload the image just to get area, we can attach that to boulders
-    im = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+    im = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
+    im = npma.array(im)
+    #this is silly to reload the image just to get area, we can attach that to boulders, it is now attached to boulders
+    #im = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
     #get the image area in meters
     im_area = float(len(im.compressed()))*res*res
     #print area
     #create the two ends of the uncertainy spectrum, assumes 1 pixel uncertainty
     err = 1
+    sigma = err*res
     sizes = np.asarray(sizes)
-    upsizes = sizes+err*res
-    downsizes = sizes-err*res
+    #upsizes = sizes+err*res
+    #downsizes = sizes-err*res
     #sizes = sizes*res
     sizes = [x for x in sizes if x < maxd]
-    upsizes = [x for x in upsizes if x<maxd]
-    downsizes = [x for x in downsizes if x<maxd]
+    #upsizes = [x for x in upsizes if x<maxd]
+    #downsizes = [x for x in downsizes if x<maxd]
     sizes = np.asarray(sizes)
-    upsizes = np.array(upsizes)
-    downsizes = np.array(downsizes)
-    bins = np.linspace(0,maxd,10*maxd+1)
+    #upsizes = np.array(upsizes)
+    #downsizes = np.array(downsizes)
+    bins = np.linspace(0,maxd,20*maxd+1)
     SFD, binsconf = np.histogram(sizes, bins=bins)
     #SFD = np.append(SFD,0)
     SFD = SFD/im_area
     sizes.sort()
-    upsizes.sort()
-    downsizes.sort()
+    #upsizes.sort()
+    #downsizes.sort()
     #areas = np.pi*(sizes/2)**2
     #SA = [sizes,areas]
     #SA = np.asarray(SA)
@@ -989,13 +1216,16 @@ def CFA(runfile,num,maxd):
     #TA = sum(areas)
     #CFA will be a list of y points, with the x points in sizes
     CFA = np.zeros_like(bins)
-    upCFA = np.copy(CFA)
-    downCFA = np.copy(CFA)
+    CFAsigma = np.zeros_like(bins)
+    #upCFA = np.copy(CFA)
+    #downCFA = np.copy(CFA)
     for i in range(len(bins)):
         CFA[i] = float(sum(map(lambda x: np.pi*((x/2.)**2),sizes[sizes>bins[i]])))/im_area
-        upCFA[i] = float(sum(map(lambda x: np.pi*((x/2.)**2),upsizes[upsizes>bins[i]])))/im_area
-        downCFA[i] = float(sum(map(lambda x: np.pi*((x/2.)**2),downsizes[downsizes>bins[i]])))/im_area
-    save1 = [bins,upCFA.tolist(),CFA.tolist(),downCFA.tolist()]
+        CFAsigma[i] = sigma*np.sqrt((np.pi/im_area)*CFA[i])
+        #upCFA[i] = float(sum(map(lambda x: np.pi*((x/2.)**2),upsizes[upsizes>bins[i]])))/im_area
+        #downCFA[i] = float(sum(map(lambda x: np.pi*((x/2.)**2),downsizes[downsizes>bins[i]])))/im_area
+    #save1 = [bins,upCFA.tolist(),CFA.tolist(),downCFA.tolist()]
+    save1 = [bins,CFA.tolist(), CFAsigma.tolist()]
     save2 = [binsconf[:-1].tolist(),SFD.tolist()]
     cfasavefile = open('%s%s%s%s_CFA.csv'%(PATH,runfile,FNM,num),'w')
     np.savetxt(cfasavefile, save1,delimiter=',')
@@ -1008,7 +1238,8 @@ def CFA(runfile,num,maxd):
     #plt.plot(bins, CFA, 'b-', alpha=.01)
     #plt.xscale('log')
     #plt.yscale('log')
-    return [bins,upCFA.tolist(),CFA.tolist(),downCFA.tolist()]
+    #return [bins,upCFA.tolist(),CFA.tolist(),downCFA.tolist()]
+    return [bins, CFA.tolist(), CFAsigma.tolist()]
 
 def plotCFArefs(xmax):
     ''' plots data from golombek 2008 for comparison, user controlled which one
@@ -1087,7 +1318,8 @@ def checkbads(runfile,num):
         patches+=j.patchplot()
     fig=plt.figure(1)
     ax = fig.add_subplot(111)
-    image = np.load('%s%s%s%s_rot_masked.npy'%(PATH, runfile,FNM, num))
+    #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH, runfile,FNM, num))
+    
     plt.imshow(image, cmap='binary_r')
     for j in patches:
         ax.add_patch(j)
@@ -1238,11 +1470,12 @@ def FindIdealParams(filename, oldvals = False):
     
 def ExamineImage(runfile,num, showblanks):
     hasshads = True
-    try:
-        att = exportdata(runfile,num)
-    except(IOError):
-        print 'no shadows in image %s'%(num)
-        hasshads = False
+    #deprecated since it is now redundant with outtoGIS
+##    try:
+##        att = exportdata(runfile,num)
+##    except():
+##        print 'no shadows or broken shadow file in image %s'%(num)
+##        hasshads = False
     if hasshads:
         load = getshads(runfile,num)
         #nned two so you dont reuse same artist, silly but necessary
@@ -1255,7 +1488,10 @@ def ExamineImage(runfile,num, showblanks):
                 break
             patches1 += dat.patchplot()
             patches2 +=dat.patchplot()
-        image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+        #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+        image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
+        image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
+        image = npma.masked_equal(image, 0)
         filtimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
@@ -1273,7 +1509,10 @@ def ExamineImage(runfile,num, showblanks):
 ##        plt.imshow(sktrans.rotate(image, -ROTANG))
 ##        plt.show()
     elif showblanks:
-        image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+        #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+        image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
+        image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
+        image = npma.masked_equal(image, 0)
         filtimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
@@ -1308,7 +1547,11 @@ def FindBigs(runfile,num,diam = 3):
     if np.any(bigs) == False:
         return None
     tossout = float(len(bigs)/total)
-    image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+    #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
+    #replacing this with the original image to save on drive space.
+    image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
+    image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
+    image = npma.masked_equal(image, 0) 
     fig,ax = plt.subplots(1,2, sharex = True, sharey = True)
     ax[0].imshow(image,cmap='binary_r',interpolation='none')
     ax[1].imshow(image,cmap='binary_r',interpolation='none')
@@ -1339,7 +1582,52 @@ def FindExcluded(runfile,maxnum,maxdiam):
     print ('%s boulders found in image, %s percent ignored due to diameter'%(total,exclpercent))
     return
     
+def ManualMerge(runfile,num,flags):
+    '''Code to manually merge two boulders, only to be used in exception circumstances
+        runfile and num specify the image, boulders listed in flags will be merged into one with lowest flag value.
+        '''
+    shads = getshads(runfile,num,mode = 'r')
+    boulds=[]
+    mergeboulds = []
+    while True:
+        try:
+            dat = pickle.load(shads)
+        except(EOFError):
+            break
+        if dat.flag in flags:
+            mergeboulds += [dat]
+        else:
+            boulds+=[dat]
+    print len(mergeboulds)
+    shads.close()
+    shads = getshads(runfile,num,mode='w')
+    for obj in boulds:
+        pickle.dump(obj,shads)
+    if len(mergeboulds) == len(flags):
+        finalflag = mergeboulds[0].flag
+        finalarea = mergeboulds[0].im_area
+        finalpixels = []
+        for i in mergeboulds:
+            finalpixels+=i.pixels
+        
+        newbould=shadow(finalflag, finalpixels, finalarea)
+        newbould.run_prep()                  
+        newbould.run_fit()
+        newbould.run_post()
+        pickle.dump(newbould,shads)
+        shads.close
+        print 'succesfully merged input boulders with flags %s'%(flags)
+        return
 
+    else:
+        print'Did not find %s boulders, aborting merge'%(len(flags))
+        for obj in mergeboulds:
+            pickle.dump(obj,shads)
+        shads.close()
+        return
+        
+    
+    
 
 def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 2.25,extension='.PGw'):
     '''this code will take an entire run and export the boulder data to a GIS-interpretable format, assume pngs for the moment'''
@@ -1369,7 +1657,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 2.25,extension='.PGw'):
         #bring in the image each time, wouldnt have to do this if they were all identical
         #but that cant be gauranteed
         try:
-            seg = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,i))
+            seg = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,i))
         except(IOError):
             continue
         shads = getshads(runfile,i)
@@ -1427,7 +1715,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 2.25,extension='.PGw'):
                     datafile2.write(info)
                 
                 
-                
+        shads.close()           
     datafile.close()
     return
             

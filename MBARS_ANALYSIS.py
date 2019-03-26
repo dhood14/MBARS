@@ -24,9 +24,14 @@ Catch all code to look at results
 #filename = 'ESP_028612_1755_RED66_'
 #filename = 'PSP_007718_2350_RED300px'
 #filename = 'TRA_000828_2495_RED500PX'
-filename = 'ESP_011357_2285_RED300PX'
+#filename = 'ESP_011357_2285_RED300PX'
 #filename = 'PSP_001391_2465_RED500PX'
-#filename = 'ESP_036437_2290_RED500PX'
+filename = 'ESP_036437_2290_RED500PX'
+
+#viking 2 lander images:
+#filename = 'PSP_001521_2025_RED100PNL47_500PX'
+#filename = 'PSP_001719_2025_RED100PNL52_500PX'
+#filename = 'ESP_046170_2025_RED_100PNL52_500PX'
 
 MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(filename)
 MBARS.FNM = filename
@@ -35,17 +40,23 @@ MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROT
 
 
 #######################PICK THE ANALYSES##################
-OutToGIS = True
-MakeCFAs = True
+ManualMerge = False
+OutToGIS = False
+MakeCFAs = False
 bigs = False
 imageanalysis = True
 #DOES NOT WORK
 densmap = False
 
 
+#manual Merge Controls:
+#uses trgetfile as the runfile
+#A and B flags mark the boulders to merge
+MMnum = 4
+MMflags = [1836,1826]
 #controls for making CFAs
 #determines diameter past which the program does not count boulders
-maxd = 2.25
+maxd = 10
 
 #doing this automatically now, will run on all unless told otherwise:
 runfiles = []
@@ -54,18 +65,27 @@ runfiles = [f for f in allfiles if 'gam' in f]
 runfiles = [f+'//' for f in runfiles]
 
 #force it into a limited list here:
-runfiles = ['gam600_manbound140//']
+runfiles = ['gam600_manbound151//']
+runfiles = ['gam600_bound100//']
 
 
 #controls for examining images & bigs
-trgtfile = 'gam600_manbound151//'
-maxdiam = 2.25
+trgtfile = 'gam600_manbound159//'
+trgtfile = 'gam600_bound100//'
+maxdiam = 3
 #when running exmaine images, do you want to see images with no boulders?
 showblanks = False
 
 
 
 #where the actual work happens
+if ManualMerge:
+    query = 'Did you mean to do a manual Merge?\n y/n?\n'
+    answer = raw_input(query)
+    if answer != 'y':
+        print 'OK I wont do it'
+    else:
+        MBARS.ManualMerge(trgtfile,MMnum,MMflags)
 if OutToGIS:
     for i in runfiles:
         MBARS.OutToGIS(i,num)
@@ -75,7 +95,7 @@ if MakeCFAs:
     record.write('Filename ,Best Fit Rock Abundance,R^2,Upper limit RA, lower limt RA, maxd=%s\n'%(maxd))
     for i in range(len(runfiles)):
         plt.figure(i)
-        fit_k,upfit_k,downfit_k, fit_r2 = MBARS.bulkCFA(runfiles[i],num+1,maxd,root)
+        fit_k,upfit_k,downfit_k, fit_r2 = MBARS.bulkCFA(runfiles[i],num+1,maxd,2.25,root)
         if fit_k == None:
             continue
         print'Best fit rock abundance for file %s is %s percent, up to %s, or down to %s with an R^2 of %s'%(runfiles[i],fit_k*100,upfit_k*100,downfit_k*100, fit_r2)

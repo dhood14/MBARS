@@ -28,12 +28,25 @@ and numerals at the end, i.e. "root0.PNG" and "root23.PNG"
 ##panels = 204
 ##
 
-filenameA = 'TRA_000828_2495_RED500PX'
+#filenameA = 'TRA_000828_2495_RED500PX'
 filenameB = 'ESP_011357_2285_RED300PX'
 filenameC = 'PSP_001391_2465_RED500PX'
 filenameD = 'PSP_007718_2350_RED300px'
-#filename = 'ESP_036437_2290_RED500PX'
-filenames  = [filenameA,filenameB,filenameC,filenameD]
+filenameA = 'ESP_036437_2290_RED500PX'
+filenames  = [filenameB,filenameC,filenameD]
+
+#viking 2 lander setup:
+##filenameAA = 'PSP_001521_2025_RED100PNL47_500PX'
+#filenameBB = 'PSP_001719_2025_RED100PNL52_500PX'
+filenameCC = 'ESP_046170_2025_RED_100PNL52_500PX'
+filenames = [filenameCC]
+
+#PSP_007718 subset images
+filenames = ['PSP_007718_2350_']
+
+#JoesImages
+filenames = ['PSP_007693_2300_RED500PX']
+
 plot = False
 #for continuing broken runs, use Startat to specify which panel to begin on for the first run
 #does not do anything for threaded runs as they are not necessarily linear
@@ -42,8 +55,8 @@ startat = 0
 gams = [.6]
 bounds = [.10]
 
-#experimental, 100 seems to work, no limit causes memory errors.
-thread_limit = 100
+#experimental, 100 seems to work, setting no limit causes memory errors.
+thread_limit = 10
 
 def run(filename,gams,bounds,plot,startat):
     
@@ -60,10 +73,10 @@ def run(filename,gams,bounds,plot,startat):
         bound = bounds[j]
         for i in range(startat,panels):
             #MBARS.FNM = '%s%s'%(root, i)
-            mod, seg, good, runfile = MBARS.gamfun(i,mangam, plot, bound,manbound)
+            seg, good, runfile = MBARS.gamfun(i,mangam, plot, bound,manbound)
             #print 'step 1 done'
             if good:
-                mod = None
+                
                 if any(seg.compressed()):
                     bads = MBARS.boulderdetect(i,seg,runfile)
             if i%500 == 0:
@@ -85,12 +98,12 @@ def run(filename,gams,bounds,plot,startat):
 def core(num,gam,plot,bound,manbound,odr_keycard):
     '''core function of the run file, does gamfun and boulder detect
     '''
-    mod, seg, good, runfile = MBARS.gamfun(num,gam, plot, bound,manbound)
+    seg, good, runfile = MBARS.gamfun(num,gam, plot, bound,manbound)
     #print 'step 1 done'
     if good:
-        mod = None
         if any(seg.compressed()):
             bads = MBARS.boulderdetect_threadsafe(num,seg,runfile,odr_keycard)
+            MBARS.overlapcheck_threadsafe(num,runfile, odr_keycard, overlap=.1)
     if num%200 == 0:
         print 'Done with image %s'%(num)
     return runfile
@@ -110,22 +123,27 @@ def thread_run(filename,gams,bounds,plot,startat):
         gam = gams[j]
         bound = bounds[j]
         threads = []
-        krange = range(panels)
+        krange = range(startat,panels)
         #length = len(krange)
         #args = zip(krange,[mangam]*length,[plot]*length,[bound]*length,[manbound]*length)
         #args = [list(a) for a in args]
         #run core(i) function
         print '%s images to run'%(panels)
         odr_keycard = threading.Lock()
-        threads = [threading.Thread(target = core, args=(a,mangam,plot,bound,manbound,odr_keycard)) for a in krange]
+        threads = [threading.Thread(target = core, args=(a,mangam,plot,bound,manbound,odr_keycard),name='%s'%(a)) for a in krange]
         for i in threads:
             runfile = i.start()
             while threading.active_count() > thread_limit:
                 #print 'Waiting at %s on thread room'%(i.name)
                 time.sleep(5)
         startat = 0
+        count = 0
         for a in threads:
             a.join()
+            if count%500 == 0:
+                print 'Done with thread %s'%(a.name)
+            count+=1
+            
         t2 = time.clock()
         ttime = (t2-t1)/3600.
         print ('total time: '+str(ttime)+'hours')
