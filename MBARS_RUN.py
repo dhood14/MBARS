@@ -9,24 +9,6 @@ import threading
 set number of images, this is expecting a series of images with the same root name
 and numerals at the end, i.e. "root0.PNG" and "root23.PNG"
 '''
-##root = 'PSP_007718_2350_'
-##MBARS.ID = 'PSP_007718_2350_RED'
-##panels=3
-##MBARS.NOMAP = True
-
-##root = 'TRA_000828_2495_RED_300PX'
-##MBARS.ID = 'TRA_000828_2495_RED'
-##panels = 4965
-
-##root = 'PSP_001501_2280_RED_NOMAP_300PX'
-##MBARS.ID = 'PSP_001501_2280_RED'
-##panels = 8977
-
-##root = 'ESP_028612_1755_RED66_'
-##MBARS.ID = 'ESP_028612_1755_RED'
-##MBARS.NOMAP = False
-##panels = 204
-##
 
 #filenameA = 'TRA_000828_2495_RED500PX'
 filenameB = 'ESP_011357_2285_RED300PX'
@@ -47,120 +29,119 @@ filenames = ['PSP_007718_2350_']
 #JoesImages
 filenames = ['PSP_007693_2300_RED500PX']
 
+
+######SOME CONTROLS###################
+#produce intermediate plots, False unless you are debugging something
 plot = False
+
 #for continuing broken runs, use Startat to specify which panel to begin on for the first run
-#does not do anything for threaded runs as they are not necessarily linear
-startat = 0
-# parameters
-gams = [.6]
-bounds = [.10]
+#Keep in  mind that threaded runs do not complete the files in order, use with caution
+startat = 2200
 
-#experimental, 100 seems to work, setting no limit causes memory errors.
+#mostly deprecated, uses manually determined boundaries
+### parameters
+##gams = [.6]
+##bounds = [.10]
+
+#Process is largely processer-limited, so benefit to large number of threads is minimal
+#setting no limit causes memory errors.
 thread_limit = 10
+#make true  if you want to run without threads
+NOTHREADS = False
 
-def run(filename,gams,bounds,plot,startat):
-    
+def run(filename,plot,startat):
+    '''for running in a non-threaded fashion if desired'''
+    #retrieve running parameters
     mangam, manbound = MBARS.FindIdealParams(filename)
 
+    #setup paths and filenames
     MBARS.FNM, MBARS.ID, MBARS.NOMAP,panels = MBARS.RunParams(filename)
-
     MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(MBARS.FNM)
     MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
 
-    for j in range(len(gams)):
-        t1 = time.clock()
-        gam = gams[j]
-        bound = bounds[j]
-        for i in range(startat,panels):
-            #MBARS.FNM = '%s%s'%(root, i)
-            seg, good, runfile = MBARS.gamfun(i,mangam, plot, bound,manbound)
-            #print 'step 1 done'
-            if good:
-                
-                if any(seg.compressed()):
-                    bads = MBARS.boulderdetect(i,seg,runfile)
-            if i%500 == 0:
-                print '\n===========done %s out of %s==============\n'%(i,panels)
-            startat = 0
-        t2 = time.clock()
-        ttime = (t2-t1)/3600.
-        print ('total time: '+str(ttime)+'hours')
+    t1 = time.clock()
+    for i in range(startat,panels):
+        runfile = core(i,mangam,plot,manbound,True)
+        if i%500 == 0:
+            print '\n===========done %s out of %s==============\n'%(i,panels)
+        startat = 0
+    t2 = time.clock()
+    ttime = (t2-t1)/3600.
+    print ('total time: '+str(ttime)+'hours')
 
-        #this is to note the last running conditions:
-        string = "This image was last run with the parameters gam = %s, plot = %s, bound=%s. \nIt took %s hours"%(gam, plot,bound,ttime)
-        record = open('%s%s%s_runinfo.txt'%(MBARS.PATH,runfile,MBARS.FNM),'w')
-        for item in string:
-            record.write(item)
-        record.close()
+    #this is to note the last running conditions:
+    string = "This image was last run with the parameters mangam = %s, manbound=%s. \nIt took %s hours"%(mangam,manbound,ttime)
+    record = open('%s%s%s_runinfo.txt'%(MBARS.PATH,runfile,MBARS.FNM),'w')
+    for item in string:
+        record.write(item)
+    record.close()
     return
 
 
-def core(num,gam,plot,bound,manbound,odr_keycard):
+def core(num,gam,plot,manbound,odr_keycard):
     '''core function of the run file, does gamfun and boulder detect
     '''
-    seg, good, runfile = MBARS.gamfun(num,gam, plot, bound,manbound)
+    seg, good, runfile = MBARS.gamfun(num,gam, plot,manbound)
     #print 'step 1 done'
     if good:
         if any(seg.compressed()):
             bads = MBARS.boulderdetect_threadsafe(num,seg,runfile,odr_keycard)
-            MBARS.overlapcheck_threadsafe(num,runfile, odr_keycard, overlap=.1)
+            MBARS.overlapcheck_threadsafe_DBSCAN(num,runfile, odr_keycard, overlap=.1)
     if num%200 == 0:
         print 'Done with image %s'%(num)
     return runfile
 
-def thread_run(filename,gams,bounds,plot,startat):
-    
-    
+def thread_run(filename,plot,startat):
 
     MBARS.FNM, MBARS.ID, MBARS.NOMAP,panels = MBARS.RunParams(filename)
 
     MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(MBARS.FNM)
     MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
     mangam,manbound = MBARS.FindIdealParams(filename,True)
-
-    for j in range(len(gams)):
-        t1 = time.clock()
-        gam = gams[j]
-        bound = bounds[j]
-        threads = []
-        krange = range(startat,panels)
-        #length = len(krange)
-        #args = zip(krange,[mangam]*length,[plot]*length,[bound]*length,[manbound]*length)
-        #args = [list(a) for a in args]
-        #run core(i) function
-        print '%s images to run'%(panels)
-        odr_keycard = threading.Lock()
-        threads = [threading.Thread(target = core, args=(a,mangam,plot,bound,manbound,odr_keycard),name='%s'%(a)) for a in krange]
-        for i in threads:
-            runfile = i.start()
-            while threading.active_count() > thread_limit:
-                #print 'Waiting at %s on thread room'%(i.name)
-                time.sleep(5)
-        startat = 0
-        count = 0
-        for a in threads:
-            a.join()
-            if count%500 == 0:
-                print 'Done with thread %s'%(a.name)
-            count+=1
-            
-        t2 = time.clock()
-        ttime = (t2-t1)/3600.
-        print ('total time: '+str(ttime)+'hours')
-
-        #this is to note the last running conditions:
-        string = "This image was last run with the parameters gam = %s, plot = %s, bound=%s. \nIt took %s hours"%(gam, plot,bound,ttime)
-        record = open('%s%s%s_runinfo.txt'%(MBARS.PATH,runfile,MBARS.FNM),'w')
-        for item in string:
-            record.write(item)
-        record.close()
+    t1 = time.clock()
+    
+    threads = []
+    krange = range(startat,panels)
+    print '%s images to run'%(panels)
+    odr_keycard = threading.Lock()
+    threads = [threading.Thread(target = core, args=(a,mangam,plot,manbound,odr_keycard),name='%s'%(a)) for a in krange]
+    count=0
+    for i in range(len(threads)):
+        runfile = threads[i].start()
+        while threading.active_count() > thread_limit:
+            #print 'Waiting at %s on thread room'%(i.name)
+            time.sleep(5)
+        # make sure the dragging end doesnt get too far behind
+        # This way, when it encounters a big image it wont move on too far
+        if i>thread_limit:
+            threads[i-thread_limit].join()
+            if (i-thread_limit)%200 == 0:
+                print 'completed thread %s'%(threads[i-thread_limit].name())
+        
+    #make sure it does not execute any more code until all threads done
+    for i in threads:
+        i.join()
+    
+    startat = 0  
+    t2 = time.clock()
+    ttime = (t2-t1)/3600.
+    print ('total time: '+str(ttime)+'hours')
+    #this is to note the last running conditions:
+    string = "This image was last run with the parameters mangam = %s, manbound=%s. \nIt took %s hours"%(mangam,manbound,ttime)
+    record = open('%s%s%s_runinfo.txt'%(MBARS.PATH,runfile,MBARS.FNM),'w')
+    for item in string:
+        record.write(item)
+    record.close()
     return
 #setup all the parameters before running
 for i in filenames:
     mangam, manbound = MBARS.FindIdealParams(i)
     
 for i in filenames:
-    thread_run(i,gams,bounds,plot,startat)
+    if NOTHREADS:
+        run(i,plot,startat)
+    else:
+        thread_run(i,plot,startat)
 
 
 
