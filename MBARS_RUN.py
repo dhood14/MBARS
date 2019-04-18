@@ -9,25 +9,38 @@ import threading
 set number of images, this is expecting a series of images with the same root name
 and numerals at the end, i.e. "root0.PNG" and "root23.PNG"
 '''
+filenames = []
 
-#filenameA = 'TRA_000828_2495_RED500PX'
-filenameB = 'ESP_011357_2285_RED300PX'
-filenameC = 'PSP_001391_2465_RED500PX'
-filenameD = 'PSP_007718_2350_RED300px'
-filenameA = 'ESP_036437_2290_RED500PX'
-filenames  = [filenameB,filenameC,filenameD]
+#filename += 'ESP_011357_2285_RED300PX'
 
-#viking 2 lander setup:
+#filenameD = 'PSP_007718_2350_RED300px'
+#filenameA = 'ESP_036437_2290_RED500PX'
+#filenames  = [filenameB,filenameC,filenameD]
+
+#GOlombek Comparison Images
+#filenames += ['TRA_000828_2495_RED500PX']
+filenames += ['PSP_001391_2465_RED500PX']
+
+#viking 1 lander setup:
 ##filenameAA = 'PSP_001521_2025_RED100PNL47_500PX'
 #filenameBB = 'PSP_001719_2025_RED100PNL52_500PX'
-filenameCC = 'ESP_046170_2025_RED_100PNL52_500PX'
-filenames = [filenameCC]
+#filenameCC = 'ESP_046170_2025_RED_100PNL52_500PX'
+#filenames = [filenameCC]
+
+#viking 2 lander images
+#filenameA = 'PSP_001501_2280_RED100PNL47_500PX'
+#filenameB = 'PSP_001976_2280_RED100PNL52_500PX'
+#filenameC = 'PSP_002055_2280_RED100PNL57_500PX'
+#filenames = [filenameA]
 
 #PSP_007718 subset images
-filenames = ['PSP_007718_2350_']
+#filenames = ['PSP_007718_2350_']
 
 #JoesImages
-filenames = ['PSP_007693_2300_RED500PX']
+#filenames = ['PSP_007693_2300_RED500PX']
+
+#Proposal Test Images
+filenames += ['PSP_001415_2470_RED500PX']
 
 
 ######SOME CONTROLS###################
@@ -36,7 +49,7 @@ plot = False
 
 #for continuing broken runs, use Startat to specify which panel to begin on for the first run
 #Keep in  mind that threaded runs do not complete the files in order, use with caution
-startat = 2200
+startat = 0
 
 #mostly deprecated, uses manually determined boundaries
 ### parameters
@@ -45,7 +58,7 @@ startat = 2200
 
 #Process is largely processer-limited, so benefit to large number of threads is minimal
 #setting no limit causes memory errors.
-thread_limit = 10
+thread_limit = 2
 #make true  if you want to run without threads
 NOTHREADS = False
 
@@ -116,7 +129,7 @@ def thread_run(filename,plot,startat):
         if i>thread_limit:
             threads[i-thread_limit].join()
             if (i-thread_limit)%200 == 0:
-                print 'completed thread %s'%(threads[i-thread_limit].name())
+                print 'completed thread %s'%(threads[i-thread_limit].name)
         
     #make sure it does not execute any more code until all threads done
     for i in threads:

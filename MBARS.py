@@ -52,9 +52,11 @@ SUNANGLE = None
 RESOLUTION = None
 ROTANG = None
 #MAX EXPECTED BOULDER SIZE, expressed in pixels
+#max diameter (MD) and max height (MH), done after measurements
 MD = 30
 MH = 30
-MA = np.pi*(MD/2)**2
+#maximum shadow area, taken before measrements, based soleley on the shadow area
+MA = 300
 #minimum accepted boulder size expressed in pixels
 minA = 4
 
@@ -346,13 +348,27 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
 
     #compute modified distance matrix
     #make meshgrids of every number in the calculation
+    #includes some precomputing to minimize the memory footprint
     ya,yb = np.meshgrid([a[1] for a in parameters],[a[1] for a in parameters])
+    ydist = (ya-yb)**2
+    ya = None
+    yb = None
     xa,xb = np.meshgrid([a[2] for a in parameters],[a[2] for a in parameters])
+    xdist = (xa-xb)**2
+    xa = None
+    xb = None
+    tdist = np.sqrt(ydist+xdist)
+    ydist = None
+    xdist = None
     da,db = np.meshgrid([a[3] for a in parameters],[a[3] for a in parameters])
-    
+    dsum = da+db
+    da = None
+    db = None
     #calculate the distance ratio
     #D = euclidean distance between points/sum of radii, this way boulders that touch have a D of 1 or less
-    D = 2*np.sqrt((ya-yb)**2+(xa-xb)**2)/(da+db)
+    D = 2*tdist/(dsum)
+    dsum = None
+    tdist = None
     #this is now the Distance matrix to pass to DBSCAN
     #arguments that go to DBSCAN: D, distance matrix, 1=distance to be considered neighbors, 2 min number to form group, metric: Since we are passing a distance matrix, precomputed
     cores,labels = skcluster.dbscan(D,1,2,metric='precomputed')
@@ -970,7 +986,7 @@ def bulkCFA(runfile,maxnum,maxd,fitmaxd,root):
     errors+=[fitRA-downfitRA]
     errors+=[upfitRA-fitRA]
     #plots stack in reverse, so plot what you want on top first (I think...)
-    plt.errorbar(bins,avgCFAs,label = root,zorder=3, yerr = avgCFAsigmas,fmt = 'none', ecolor = 'g', c = 'g', marker='|')
+    plt.plot(bins,avgCFAs,label = root,zorder=3, c = 'g', marker='|')
     
     plt.errorbar(fit_bins,fitRA,zorder=2,label = 'RA Envelope',yerr = errors,ecolor = 'k',c = 'k',marker='|',alpha=.5)
     plt.plot(fit_bins,topqfitRA,zorder=3,label = '75th Percentile RA')
@@ -1436,7 +1452,7 @@ def ManualMerge(runfile,num,flags):
     
     
 
-def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 2.25,extension='.PGw'):
+def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
     '''this code will take an entire run and export the boulder data to a GIS-interpretable format, assume pngs for the moment'''
     ''' A key part of this is interpreting the PGW files, which follow this convention:
         6 values on 6 lines:
@@ -1488,7 +1504,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 2.25,extension='.PGw'):
         while True:
             try:
                 dat  = pickle.load(shads)
-            except(EOFError):
+            except:
                 break
             if dat.measured:
                 flag = dat.flag
@@ -1524,6 +1540,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 2.25,extension='.PGw'):
                 
         shads.close()           
     datafile.close()
+    datafile2.close()
     return
             
         
