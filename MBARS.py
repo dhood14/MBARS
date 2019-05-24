@@ -58,7 +58,7 @@ MH = 30
 #maximum shadow area, taken before measrements, based soleley on the shadow area
 MA = 300
 #minimum accepted boulder size expressed in pixels
-minA = 4
+minA = 2
 
 
 '''this is called at the end to initialize the program'''
@@ -283,7 +283,7 @@ def watershedmethod(image):
     #invert the image so the shadows are peaks not lows
     temp = temp*(-1)+np.max(image)+1
     #find the peaks in the image, return the points as a nx2 array
-    points = skfeat.peak_local_max(temp,min_distance=1, indices=True)
+    points = skfeat.peak_local_max(temp,min_distance=2, indices=True)
 
     #put in a guard against images with no shadows
     threshold = len(image.compressed())/2
@@ -339,9 +339,9 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
         except(EOFError):
             break
         #pull in the flag, the y coordiante, the x coordinate, and the width
-        parameters+=[[data.flag,data.bouldcent[0],data.bouldcent[1],data.bouldwid]]
-    #get rid of boudlers with no measurements
-    parameters = [a for a in parameters if a[3]]
+        parameters+=[[data.flag,data.bouldcent[0],data.bouldcent[1],data.bouldwid, data.fitgood]]
+    #get rid of boudlers with unreliable measurements
+    parameters = [a for a in parameters if a[4]]
     if len(parameters) == 0:
         shadow_file.close()
         return
@@ -378,11 +378,11 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
         parameters[i]+=[labels[i]]
     #make our 'web' of flags, a list where every sublist is flags that are interconnected
     webs = []
-    for i in range(max(labels)):
+    for i in range(max(labels)+1):
         subweb=[]
         for j in parameters:
-            if j[4] == i:
-                subweb+=[j[4]]
+            if j[5] == i:
+                subweb+=[j[0]]
         webs+=[subweb]
     
     #now lets re-read in the shadow data
@@ -398,7 +398,7 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
     shadow_file = getshads(runfile,num,mode='w')
 
     
-    problem_flags = [a[0] for a in parameters if a[4]!=-1]
+    problem_flags = [a[0] for a in parameters if a[5]!=-1]
     problem_boulders = []
     for i in og_data:
         if i.flag in problem_flags:
@@ -406,7 +406,7 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
         else:
             pickle.dump(i,shadow_file)
     og_data = None
-
+    #print(webs)
     #OK with just the problem_boulders list, we can do the work
     for subweb in webs:
         #print subweb
@@ -420,11 +420,13 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
         #merge = True
         while True:
             #print 'Current_web length: %s'%(len(current_web))
+            #print(subweb)
             #reset to no merge
             merge = False
             #current_web = newboulds
             newboulds = []
             for a in current_web:
+                #print'looking for merges'
                 if merge:
                     continue
                 #A_flag = j.flag
@@ -434,23 +436,30 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
                     #B_flag = k.flag
                     if a.flag != b.flag:
                         #look for overlapping pairs in the web
+                        
                         area = checkpos(a,b)
+                        #print(area)
                         
                         if area > overlap:
+                            #print 'Merging Boulders'
                             #if they overlap too much, make a new shadow that combines their pixels and re-run
                             newbould=shadow(a.flag, a.pixels+b.pixels, a.im_area)
                             newbould.run_prep()
                             with odr_keycard:
                                 newbould.run_fit()
                             newbould.run_post()
-                            #you found two that needed to merge
-                            A_flag = a.flag
-                            B_flag = b.flag 
-                            #print 'Merged %s and %s'%(A_flag,B_flag)
-                            merge = True
+                            if newbould.fitgood == True and newbould.bouldwid_m<MD:
+                                #you found two that needed to merge and it made a decent boulder
+                                A_flag = a.flag
+                                B_flag = b.flag 
+                                #print 'Merged %s and %s'%(A_flag,B_flag)
+                                merge = True
+                                #if the new boulder does not look good, Merge is not set to True and the algorithm never merges them
+                            
+                                
             if merge:
                 #since you found two that merged, dont add them to the next web and put the new one in
-                
+                #print 'I found a merge!'
                 for bould in current_web:
                     if bould.flag != A_flag and bould.flag != B_flag:
                         newboulds+=[bould]
@@ -465,6 +474,8 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
         #now save all these new ones you just made
         for boulder in current_web:
             #print'Dumping shadows'
+            #print 'Saving Boulders'
+            #print(boulder.flag)
             pickle.dump(boulder,shadow_file)
     shadow_file.close()
     return
@@ -548,12 +559,13 @@ def checkpos(shadow1,shadow2):
     else:
         #note: all this work is done in pixels not meters
         x = (ra**2 - rb**2 + d**2)/(2*d)
-        y = np.sqrt(ra**2+x**2)
+        y = np.sqrt(ra**2-x**2)
         #note: this returns in radians
-        thetaA = np.arccos(x/ra)
-        thetaB = np.arccos((d-x)/rb)
+        thetaA = abs(np.arccos(x/ra))
+        thetaB = abs(np.arccos((d-x)/rb))
         #relevant EQ, area of circle slice: piR^2*(2theta/2pi), triangle .5*b*h
         area = (ra**2)*thetaA - x*y + (rb**2)*thetaB - (d-x)*y
+        #print('ra = %s, rb = %s, d = %s'%(ra,rb,d))
         area = area/(np.pi*rb**2)
         return area
     
@@ -634,8 +646,9 @@ class shadow(object):
         self.odrfit_m()
 
     def run_post(self):
-        if self.fitgood:
-            self.shadowmeasure_m()
+        #turned off this guard to see if large ones are being tossed
+        #if self.fitgood:
+        self.shadowmeasure_m()
         
     def findborder(self):
         #we will look at each point and see if it has neighbors, if not, there is a border
@@ -787,6 +800,9 @@ class shadow(object):
         # so np.cos(alpha) is essentially either 0,1, or -1, or at least close to it. With this
         #non-zero results (~1 or -1) will be negative, others will be positive
         test = .5 - abs(np.cos(self.fitbeta[4]))
+
+        #build in exception here for small boulders? preserve them until merging can be done...
+        #with a minimum of four pixels, no problems were had
         
         if test <= 0:
             factor = np.cos(self.fitbeta[4])
@@ -845,12 +861,18 @@ class shadow(object):
         alpha = beta[3]
         return (((y-yc)*np.cos(alpha)+(x-xc)*np.sin(alpha))/ay)**2 + (((x-xc)*np.cos(alpha)-(y-yc)*np.sin(alpha))/ax)**2 - 1
 
-    def patchplot(self):
+    def patchplot(self,filt):
         #this will be the new ellipse plotting function that uses the matplotlib patches function
         #need to figure out how to make sure they are plotting correctly though...
+        #filter controls whether big ones will be plotted
        
         color = 'g'
         alpha = .2
+        if not filt:
+            angle = np.degrees(np.pi-(self.fitbeta[4]%(2*np.pi)))
+            shadow = patches.Ellipse([self.fitbeta[2],self.fitbeta[0]], self.fitbeta[3]*2., self.fitbeta[1]*2., angle, color = color, alpha = alpha)
+            boulder = patches.Circle([self.bouldcent[1],self.bouldcent[0]], (self.bouldwid/2.), alpha=alpha)
+            return [shadow, boulder]
         if self.measured:
             angle = np.degrees(np.pi-(self.fitbeta[4]%(2*np.pi)))
             shadow = patches.Ellipse([self.fitbeta[2],self.fitbeta[0]], self.fitbeta[3]*2., self.fitbeta[1]*2., angle, color = color, alpha = alpha)
@@ -1309,13 +1331,13 @@ def ExamineImage(runfile,num, showblanks):
                 dat = pickle.load(load)
             except EOFError:
                 break
-            patches1 += dat.patchplot()
-            patches2 +=dat.patchplot()
+            patches1 += dat.patchplot(False)
+            patches2 +=dat.patchplot(False)
         #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
         image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
         image = npma.masked_equal(image, 0)
-        filtimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
+        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num))
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
         ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
@@ -1336,7 +1358,7 @@ def ExamineImage(runfile,num, showblanks):
         image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
         image = npma.masked_equal(image, 0)
-        filtimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
+        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num))
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
         ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
@@ -1471,7 +1493,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
     datafile = open("%sGISFiles//%s%s_boulderdata.csv"%(PATH,runfile,FNM),'w')
     datafile2 = open("%sGISFiles//%s%s_DEFINITEboulderdata.csv"%(PATH,runfile,FNM),'w')
     #put in the headers, we will start small with the boulders:
-    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen\n'
+    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen,measured,fitgood\n'
     datafile.write(headers)
     datafile2.write(headers)
     #bring in the original rotation information
@@ -1506,36 +1528,42 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
                 dat  = pickle.load(shads)
             except:
                 break
-            if dat.measured:
+            #taking out the filter for now to see if good ones are getting tossed
+            try:
                 flag = dat.flag
                 bouldwid_m = dat.bouldwid_m
                 bouldheight_m = dat.bouldheight_m
                 shadlen = dat.shadlen
+                #GIS doesnt like mixing data types in csv
+                measured = int(dat.measured)
+                fitgood = int(dat.fitgood)
                 #weve got to do something a little tricky here, we need the pixel location of the boulders in the un-rotated images
                 #first we make a pointmap with flags to keep track
                 #boulds+=[dat]
                
                 xpos = dat.bouldcent[1]
                 ypos = dat.bouldcent[0]
-
+            except:
+                print "failed to retrieve parameters"
+                continue
                 #change xpos and ypos to origin on the image center
-                xpos_c = xpos-lxcent
-                ypos_c = ypos-lycent
+            xpos_c = xpos-lxcent
+            ypos_c = ypos-lycent
 
-                #rotate them, must give the negative rotation
-                xpos_rot_c = xpos_c*np.cos(rotang_r) - ypos_c*np.sin(rotang_r)
-                ypos_rot_c = xpos_c*np.sin(rotang_r) + ypos_c*np.cos(rotang_r)
+            #rotate them, must give the negative rotation
+            xpos_rot_c = xpos_c*np.cos(rotang_r) - ypos_c*np.sin(rotang_r)
+            ypos_rot_c = xpos_c*np.sin(rotang_r) + ypos_c*np.cos(rotang_r)
 
-                #re-reference to the corner of the image
-                xpos_rot = xpos_rot_c + o_lxcent
-                ypos_rot = ypos_rot_c + o_lycent
-                xmap = constants[0]*xpos_rot + constants[2]*ypos_rot + constants[4]
-                ymap = constants[1]*xpos_rot + constants[3]*ypos_rot + constants[5]
-                #write it all down
-                info = '%s,%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m,shadlen)
-                datafile.write(info)
-                if bouldwid_m < dhigh and bouldwid_m >dlow:
-                    datafile2.write(info)
+            #re-reference to the corner of the image
+            xpos_rot = xpos_rot_c + o_lxcent
+            ypos_rot = ypos_rot_c + o_lycent
+            xmap = constants[0]*xpos_rot + constants[2]*ypos_rot + constants[4]
+            ymap = constants[1]*xpos_rot + constants[3]*ypos_rot + constants[5]
+            #write it all down
+            info = '%s,%s,%s,%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m,shadlen,measured,fitgood)
+            datafile.write(info)
+            if measured:
+                datafile2.write(info)
                 
                 
         shads.close()           

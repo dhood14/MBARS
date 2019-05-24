@@ -13,13 +13,13 @@ filenames = []
 
 #filename += 'ESP_011357_2285_RED300PX'
 
-#filenameD = 'PSP_007718_2350_RED300px'
+
 #filenameA = 'ESP_036437_2290_RED500PX'
 #filenames  = [filenameB,filenameC,filenameD]
 
 #GOlombek Comparison Images
-#filenames += ['TRA_000828_2495_RED500PX']
-filenames += ['PSP_001391_2465_RED500PX']
+filenames += ['TRA_000828_2495_RED500PX']
+#filenames += ['PSP_001391_2465_RED500PX']
 
 #viking 1 lander setup:
 ##filenameAA = 'PSP_001521_2025_RED100PNL47_500PX'
@@ -35,12 +35,13 @@ filenames += ['PSP_001391_2465_RED500PX']
 
 #PSP_007718 subset images
 #filenames = ['PSP_007718_2350_']
+#filenames += ['PSP_007718_2350_RED300px']
 
 #JoesImages
-#filenames = ['PSP_007693_2300_RED500PX']
+#filenames += ['PSP_007693_2300_RED500PX']
 
 #Proposal Test Images
-filenames += ['PSP_001415_2470_RED500PX']
+#filenames += ['PSP_001415_2470_RED500PX']
 
 
 ######SOME CONTROLS###################
@@ -99,7 +100,7 @@ def core(num,gam,plot,manbound,odr_keycard):
     if good:
         if any(seg.compressed()):
             bads = MBARS.boulderdetect_threadsafe(num,seg,runfile,odr_keycard)
-            MBARS.overlapcheck_threadsafe_DBSCAN(num,runfile, odr_keycard, overlap=.1)
+            MBARS.overlapcheck_threadsafe_DBSCAN(num,runfile, odr_keycard, overlap=.05)
     if num%200 == 0:
         print 'Done with image %s'%(num)
     return runfile

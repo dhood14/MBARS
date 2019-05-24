@@ -20,13 +20,24 @@ Catch all code to look at results
 
 #filename = 'ESP_018352_1805_RED'
 #filename = 'TRA_000828_2495_RED_300PX'
-#filename = 'PSP_007718_2350_'
+
 #filename = 'ESP_028612_1755_RED66_'
-#filename = 'PSP_007718_2350_RED300px'
-#filename = 'TRA_000828_2495_RED500PX'
+
+
 #filename = 'ESP_011357_2285_RED300PX'
+
+#filename = 'ESP_036437_2290_RED500PX'
+
+#Sholes Images
+filename = 'PSP_007718_2350_'
+#filename = 'PSP_007718_2350_RED300px'
+runfile='gam600_manbound102//'
+
+#Golombek Comparison Images
+#filename = 'TRA_000828_2495_RED500PX'
+#runfile = 'gam600_manbound156//'
 #filename = 'PSP_001391_2465_RED500PX'
-filename = 'ESP_036437_2290_RED500PX'
+#runfile = 'gam600_manbound135//'
 
 #viking 1 lander images:
 #filename = 'PSP_001521_2025_RED100PNL47_500PX'
@@ -34,17 +45,21 @@ filename = 'ESP_036437_2290_RED500PX'
 #filename = 'ESP_046170_2025_RED_100PNL52_500PX'
 
 #Viking 2 lander:
-filename = 'PSP_001501_2280_RED100PNL47_500PX'
+#filename = 'PSP_001501_2280_RED100PNL47_500PX'
 #filename = 'PSP_001976_2280_RED100PNL52_500PX'
 #filename = 'PSP_002055_2280_RED100PNL57_500PX'
 
 #Joes Images
 #filename = 'PSP_007693_2300_RED500PX'
+#runfile = 'gam600_manbound173//'
 
+#Proposal Test Images
+#filename = 'PSP_001415_2470_RED500PX'
+#runfile = 'gam600_manbound85//'
 
 #specify which running file to examine, include '//' on the end of the name
 
-runfile = 'gam600_manbound147//'
+#runfile = 'gam600_manbound147//'
 
 MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(filename)
 MBARS.FNM = filename
@@ -53,7 +68,7 @@ MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROT
 
 
 #######################PICK THE ANALYSES##################
-ManualMerge = True
+ManualMerge = False
 OutToGIS = True
 MakeCFAs = False
 bigs = False
