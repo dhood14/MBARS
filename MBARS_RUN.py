@@ -18,7 +18,7 @@ filenames = []
 #filenames  = [filenameB,filenameC,filenameD]
 
 #GOlombek Comparison Images
-filenames += ['TRA_000828_2495_RED500PX']
+#filenames += ['TRA_000828_2495_RED500PX']
 #filenames += ['PSP_001391_2465_RED500PX']
 
 #viking 1 lander setup:
@@ -34,7 +34,7 @@ filenames += ['TRA_000828_2495_RED500PX']
 #filenames = [filenameA]
 
 #PSP_007718 subset images
-#filenames = ['PSP_007718_2350_']
+filenames = ['PSP_007718_2350_']
 #filenames += ['PSP_007718_2350_RED300px']
 
 #JoesImages
@@ -100,7 +100,7 @@ def core(num,gam,plot,manbound,odr_keycard):
     if good:
         if any(seg.compressed()):
             bads = MBARS.boulderdetect_threadsafe(num,seg,runfile,odr_keycard)
-            MBARS.overlapcheck_threadsafe_DBSCAN(num,runfile, odr_keycard, overlap=.05)
+            MBARS.overlapcheck_threadsafe_DBSCAN(num,runfile, odr_keycard, overlap=.001)
     if num%200 == 0:
         print 'Done with image %s'%(num)
     return runfile

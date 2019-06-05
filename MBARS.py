@@ -26,6 +26,7 @@ import sklearn.cluster as skcluster
 from scipy.ndimage import filters
 import scipy.stats as sps
 import imageio
+import threading
 
 #This is the MBARS library, it contains all the functions needed to run MBARS
 
@@ -74,10 +75,12 @@ def start():
 # imageseg= np array with shadows marked as 0.
 
     
-def gamfun(num,gam=.6, plot=False, manualbound = 130):
+def gamfun(num,gam=.6, plot=False, manualbound = 130,quickrun = False):
     #print(num)
     #this section causes some errors to pop up between threads, two can try and make it at the same time...
-    if manualbound:
+    if quickrun:
+        runfile = 'temp//'
+    elif manualbound:
         runfile = 'gam%s_manbound%s//'%(int(gam*1000),int(manualbound))
     else:
         runfile = 'gam%s_bound%s//'%(int(gam*1000),int(boundfrac*1000))
@@ -1225,9 +1228,11 @@ def FindIdealParams(filename, oldvals = False):
     '''Code to identify ideal parameters for running images, will assume single set of values for entire image
     returns gam,bound
     '''
+    global ID,FNM,PATH,NOMAP,SAZ,NAZ,INANGLE,SUNANGLE,RESOLUTION,ROTANG
     root, ID, NOMAP, num = RunParams(filename)
     PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(filename)
     FNM = filename
+    
     #first see if it has been run before and offer to use those:
     if os.path.isfile('%slastrun.txt'%(PATH)):
         #temporary while testing something else
@@ -1250,8 +1255,9 @@ def FindIdealParams(filename, oldvals = False):
             if answer !='n':
                 print 'Lets assume you meant \'n\''
             print 'OK, lets make new values\n'
+       
     while True:
-        imnum = np.random.random_integers(0,num)
+        imnum = np.random.random_integers(0,num-1)
         image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,imnum))
         print 'Is the following sub-image representative of the entire image?\n'
         plt.imshow(image, cmap='binary_r')
@@ -1263,9 +1269,12 @@ def FindIdealParams(filename, oldvals = False):
         else:
             print 'trying new image...\n'
 
-        
+
     userinterp = True
     while userinterp:
+        
+        INANGLE, SUNANGLE,RESOLUTION,NAZ,SAZ,ROTANG = start()
+        current()
         gam = .6 
         image = npma.masked_equal(image, 0)
         imagemod = np.zeros_like(image, dtype=np.uint16)
@@ -1276,7 +1285,10 @@ def FindIdealParams(filename, oldvals = False):
         imagemod = imagemod*scale
         imagemod = imagemod.astype(int)
         bound = int(np.average(imagemod.compressed()))
+        imagemod = sktrans.rotate(imagemod,ROTANG,resize=True,preserve_range=True)
+        image = sktrans.rotate(image,ROTANG,resize=True,preserve_range=True)
         while True:
+            print "Let set an initial boundary"
             imageseg = npma.copy(imagemod)
             imageseg = imageseg.astype(float)
             imageseg = imageseg.filled(-1)
@@ -1285,11 +1297,61 @@ def FindIdealParams(filename, oldvals = False):
             imageseg = imageseg.astype(int)
             imageseg.fill_value = 0
             print ('Boundary at %s\n'%(bound))
+           
             print ('(I)ncrease or (D)ecrease the boundary? or is it (C)orrect?\n')
+            
             fig,ax = plt.subplots(1,2,sharex = True,sharey = True)
             ax[0].imshow(image,cmap = 'binary_r')
             ax[1].imshow(image,cmap = 'binary_r',alpha = .5, zorder = 1)
             ax[1].imshow(imageseg,vmin = bound,vmax = (bound+1), zorder = 0)
+            plt.show()
+            
+            prompt = 'I,D,C?\n'
+            answer = raw_input(prompt)
+            if answer == 'C' or answer == 'c':
+                break
+            prompt = 'Move by how much? (integer please)\n'
+            size = raw_input(prompt)
+            try:
+                size = int(size)
+            except(ValueError):
+                print 'that was not an int'
+                size = 5
+            
+            if answer == 'I' or answer == 'i':
+                bound+=size
+            else:
+                bound-= size
+        while True:
+            print "lets refine the boundary"
+            imageseg = npma.copy(imagemod)
+            imageseg = imageseg.astype(float)
+            imageseg = imageseg.filled(-1)
+            imageseg[imageseg>bound] = bound+1
+            imageseg = npma.masked_equal(imageseg, -1)    
+            imageseg = imageseg.astype(int)
+            imageseg.fill_value = 0
+            print ('Boundary at %s\n'%(bound))
+           
+            seg, good, runfile = gamfun(imnum,gam,False,bound,quickrun=True)
+            bads = boulderdetect_threadsafe(imnum,seg,runfile,threading.Lock())
+            overlapcheck_threadsafe_DBSCAN(imnum,runfile,threading.Lock(),overlap=.0001)
+            print ('(I)ncrease or (D)ecrease the boundary? or is it (C)orrect?\n')
+            load = getshads(runfile,imnum)
+            patches = []
+            while True:
+                try:
+                    dat = pickle.load(load)
+                except EOFError:
+                    break
+                patches += dat.patchplot(True)
+            fig,ax = plt.subplots(1,3,sharex = True,sharey = True)
+            ax[0].imshow(image,cmap = 'binary_r')
+            ax[1].imshow(image,cmap = 'binary_r',alpha = .5, zorder = 1)
+            ax[1].imshow(imageseg,vmin = bound,vmax = (bound+1), zorder = 0)
+            ax[2].imshow(image,cmap='binary_r')
+            for j in patches:
+                ax[2].add_patch(j)
             plt.show()
             prompt = 'I,D,C?\n'
             answer = raw_input(prompt)
@@ -1310,8 +1372,6 @@ def FindIdealParams(filename, oldvals = False):
             else:
                 bound-= size
             
-                
-            
 
 
 
@@ -1323,7 +1383,7 @@ def ExamineImage(runfile,num, showblanks):
 
     if hasshads:
         load = getshads(runfile,num)
-        #nned two so you dont reuse same artist, silly but necessary
+        #need two so you dont reuse same artist, silly but necessary
         patches1 = []
         patches2 = []
         while True:
