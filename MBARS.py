@@ -58,8 +58,10 @@ MD = 30
 MH = 30
 #maximum shadow area, taken before measrements, based soleley on the shadow area
 MA = 300
-#minimum accepted boulder size expressed in pixels
-minA = 2
+#minimum accepted shadow size expressed in pixels
+minA = 4
+#minimum distance between maxima in the  watershed splitting
+mindist = 3
 
 
 '''this is called at the end to initialize the program'''
@@ -262,7 +264,7 @@ def boulderdetect_threadsafe(num,image,runfile,odr_keycard):
         #must be converted to list for the neighbor-checking function to work
         pixels = pixels.tolist()
         
-        if len(pixels) >=minA and len(pixels)<MA:
+        if len(pixels)<MA and len(pixels)>0:
             
             shade = shadow(i, pixels, im_area)
             
@@ -286,7 +288,8 @@ def watershedmethod(image):
     #invert the image so the shadows are peaks not lows
     temp = temp*(-1)+np.max(image)+1
     #find the peaks in the image, return the points as a nx2 array
-    points = skfeat.peak_local_max(temp,min_distance=2, indices=True)
+    #min_distance is a super important argument,changes the minimum distance allowed betwen maxima
+    points = skfeat.peak_local_max(temp,min_distance=mindist, indices=True)
 
     #put in a guard against images with no shadows
     threshold = len(image.compressed())/2
@@ -374,7 +377,8 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
     tdist = None
     #this is now the Distance matrix to pass to DBSCAN
     #arguments that go to DBSCAN: D, distance matrix, 1=distance to be considered neighbors, 2 min number to form group, metric: Since we are passing a distance matrix, precomputed
-    cores,labels = skcluster.dbscan(D,1,2,metric='precomputed')
+    #DBSCAN is a little generous to help catch more things
+    cores,labels = skcluster.dbscan(D,1.2,2,metric='precomputed')
     #cores is a list of 'core' points, less important than labels, which groups the points into unified labels, -1 means they arent in any clusters
     #add these to the parameters list
     for i in range(len(parameters)):
@@ -451,7 +455,22 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
                             with odr_keycard:
                                 newbould.run_fit()
                             newbould.run_post()
-                            if newbould.fitgood == True and newbould.bouldwid_m<MD:
+
+                            #compare the fiterr
+                            #the ones too small to fir are assigned stupid high fiterr values
+                            if a.fiterr:
+                                fita = a.fiterr
+                            else:
+                                fita = 100
+                            if b.fiterr:
+                                fitb = b.fiterr
+                            else:
+                                fitb=100
+                            fitavg = (fita+fitb)/2.
+                            #trying to not filter until the end to avoid killing intermediate boulders
+                            #boulders that are smaller than the min and are improvements on the originals are allowed to pass
+                            if newbould.bouldwid<MD and newbould.fiterr<fitavg:
+                            #if True
                                 #you found two that needed to merge and it made a decent boulder
                                 A_flag = a.flag
                                 B_flag = b.flag 
@@ -479,10 +498,209 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
             #print'Dumping shadows'
             #print 'Saving Boulders'
             #print(boulder.flag)
+            #if boulder.fitgood:
             pickle.dump(boulder,shadow_file)
     shadow_file.close()
     return
+
+def overlapcheck_shadbased(num,runfile,odr_keycard):
+    '''
+    Another take on the overlap merging function. This one is NOT based on the interpreted boulders, rather the adjacency of shadows
+    if shadows touch each other, the function considers whether combining it with other shadows makes it a "better" shadow
+    '''
+    shadow_file = getshads(runfile, num,mode='r')
+    if shadow_file == None:
+        return
+    parameters = []
+    while True:
+        try:
+            data = pickle.load(shadow_file)
+        except(EOFError):
+            break
+        #pull in the flag, y center of the shadow, the x center of the shadow, the border
+        parameters+=[[data.flag,data.center[0],data.center[1],data.border,data.pixels]]
     
+    if len(parameters) == 0:
+        shadow_file.close()
+        return
+    
+    #each element in parameter is a boulder, first things first is to get the "adjacency" list
+    #each item in "adjacency" has three items, flag a, flag b, adjacency score (number of adjacent pixels in borders)
+    adjacency = []
+    for i in range(len(parameters)):
+        aflag = parameters[i][0]
+        ay = parameters[i][1]
+        ax = parameters[i][2]
+        abord = parameters[i][3]
+        apix = parameters[i][4]
+        if len(abord)==0:
+            abord = apix
+        #dont double-count pairs, this should speed things up
+        for j in range(i+1,len(parameters)):
+            #quicker check if they are super far apart
+            bflag = parameters[j][0]
+            by = parameters[j][1]
+            bx = parameters[j][2]
+            bbord = parameters[j][3]
+            bpix = parameters[j][4]
+            if len(bbord) ==0:
+                bbord=bpix
+
+            dist = np.sqrt((ay-by)**2+(ax-bx)**2)
+            if dist > sum([len(apix),len(bpix)]):
+                adjacency+=[[aflag,bflag,0]]
+                continue
+            #they are not super far away, so we can check adjacency
+            D = 0
+            for k in abord:
+                for l in bbord:
+                    dist = np.sqrt((k[0]-l[0])**2+(k[1]-l[1])**2)
+                    #print(k,l,dist)
+                    if dist<=1:
+                        D+=1
+            adjacency+=[[aflag,bflag,D]]
+    #print [a for a in adjacency if a[2]>0]
+    #OK, we have the adjacency, now we need to determine the clusters.
+    #these are organized by the A flag, so lets make some webs
+    clusters = []
+    for adj in adjacency:
+        #the two flagged shadows dont touch
+        if adj[2] == 0:
+            continue
+        #they do touch
+        else:
+            #see if webs exist that contain these flags
+            if len(clusters) == 0:
+                clusters+=[[adj[0],adj[1]]]
+                continue
+            #hits will mark the clusters in which the flags are found
+            hits = []
+            for i in range(len(clusters)):
+                if adj[0] in clusters[i] or adj[1] in clusters[i]:
+                    hits+=[i]
+            if len(hits) == 0:
+                clusters+=[[adj[0],adj[1]]]
+            else:
+                newclust = []
+                hits.sort(reverse=True)
+                for i in hits:
+                    newclust+= clusters.pop(i)
+                #need to amke sure new flags get added, repeats will be there, but it doesnt actually matter
+                newclust+=[adj[0],adj[1]]
+                clusters+=[newclust]
+                
+    #clusters is now a list of clusters, adjacency is still available to reference the adjacency value for pairs
+    #return to the start of the shadows and start the merging process
+    #now lets re-read in the shadow data
+    shadow_file.seek(0)
+    og_data = []
+    while True:
+        try:
+            og_data+=[pickle.load(shadow_file)]
+        except(EOFError):
+            break
+    #close and re-open for re-writing
+    shadow_file.close()
+    shadow_file = getshads(runfile,num,mode='w')
+
+    prob_flags = [a for clust in clusters for a in clust]
+    problem_boulders = []
+    for i in og_data:
+        if i.flag in prob_flags:
+            problem_boulders+=[i]
+        else:
+            #pass
+            pickle.dump(i,shadow_file)
+    og_data = None
+
+    #for testing purposes
+    report = []
+    for clust in clusters:
+        #lets collect the shadow objects for the relevant clusters
+        
+        boulds = []
+        avg_fiterr = 0.
+        all_pixels = []
+        for rock in problem_boulders:
+            if rock.flag in clust:
+                boulds+=[rock]
+                #if the rock is one of the big ones, anything is an improvement
+                if rock.bouldwid > MD:
+                    avg_fiterr+=100
+                    
+                elif rock.fiterr:
+                    avg_fiterr+=rock.fiterr
+                else:
+                    avg_fiterr+=100
+                all_pixels+=rock.pixels
+        base_flag = boulds[0].flag
+        avg_fiterr = avg_fiterr/(float(len(clust)))
+        #now, merge the pixels and see if it is better.
+        newbould=shadow(base_flag, all_pixels, boulds[0].im_area)
+        newbould.run_prep()
+        with odr_keycard:
+            newbould.run_fit()
+        newbould.run_post()
+        #consider which is better?
+        #new one exists, is better, and is smaller than max
+        #print 'considering cluster %s'%(clust)
+        #print 'New fiterr = %s, avg_fiterr = %s'%(newbould.fiterr,avg_fiterr)
+        if newbould.fiterr and newbould.fiterr < avg_fiterr and newbould.bouldwid < MD:
+            pickle.dump(newbould,shadow_file)
+            #report+=['New boulder was better']
+        #the new one is not better, consider subdividing?
+        else:
+            #report+=['old boulders were better']
+            #OK, lets attempt to calculate "connectivity", the sum of adjacency scores:
+            connectivity = []
+            for rock in boulds:
+                connect = sum([a[2] for a in adjacency if a[0] == rock.flag or a[1] == rock.flag])
+                connectivity+=[connect]
+            #zip connectivity into the boulds list
+            boulds = [list(a) for a in zip(boulds,connectivity)]
+            #print'Entering Recursive Portion'
+            #print (zip([a[0].flag for a in boulds],connectivity))
+            exclusive_shadowmerge(boulds,2,shadow_file,odr_keycard)
+            
+            
+    return
+    #return clusters,adjacency,report
+                
+                
+def exclusive_shadowmerge(boulds,mincon,shadowfile,odr_keycard):
+    ''' Calls the shadowmerge method, recursively tries to make new boulders from adjacent shadows
+    '''
+    all_pixels = []
+    avg_fiterr = 0
+    inboulds = [rock for rock in boulds if rock[1]>=mincon]
+    outboulds = [rock for rock in boulds if rock[1]<mincon]
+    if len(inboulds)>0:
+        for rock in inboulds:
+            if rock[0].bouldwid > MD:
+                avg_fiterr+=100
+            elif rock[0].fiterr:
+                avg_fiterr+=rock[0].fiterr
+            else:
+                avg_fiterr+=100
+            all_pixels+=rock[0].pixels
+        base_flag = inboulds[0][0].flag
+        avg_fiterr = avg_fiterr/(float(len(inboulds)))
+        #now, merge the pixels and see if it is better.
+        newbould=shadow(base_flag, all_pixels, inboulds[0][0].im_area)
+        newbould.run_prep()
+        with odr_keycard:
+            newbould.run_fit()
+        newbould.run_post()
+        if newbould.fiterr and newbould.fiterr < avg_fiterr and newbould.bouldwid < MD:
+            pickle.dump(newbould,shadowfile)
+            if len(outboulds)>0:
+                exclusive_shadowmerge(outboulds,1,shadowfile,odr_keycard)
+        else:
+            exclusive_shadowmerge(boulds,mincon+1,shadowfile,odr_keycard)
+    else:
+        for rock in boulds:
+            pickle.dump(rock[0],shadowfile)
+            
                          
 def touch(array,pos,wid,indflag,indpos,indwid,ind, plus=False,minus=False):
     '''Corrolary to the above overlap check function '''
@@ -609,13 +827,16 @@ class shadow(object):
         self.mborder = []
         #the flipping axis of the shadow
         self.flipaxis = []
-        #initial conditions for the non Area-preserving and AP fits, 
+        #initial conditions for the non Area-preserving and AP fits,
+        #this gets overwritten in the run_prep section, leaving here for now
         self.fitinit = [self.center[0], 2.0,self.center[1], 2.0, 0.]
-        self.AP_fitinit = [self.center[0],2.0, self.center[1], 0.]
+        self.AP_fitinit = [self.center[0],2.0,self.center[1], 0.]
         #Empty variable, will be the return from the ODR fit
         self.fitbeta = None
         #Is the fit good assumed False, see ODRFit functions for conditions
         self.fitgood = False
+        #Measurement of how well the fit actually fits, used to determine if merges improve the result
+        self.fiterr = None
         #records stoppping condition of the ODR, <4 is good, >4 is bad, 4 is OK
         self.fitinfo = None
 
@@ -641,12 +862,16 @@ class shadow(object):
     def run_prep(self):
         #main function that does most things we want it to do
         
-        self.findborder()
-        self.mirror()
+        #self.findborder()
+        self.findborder_cents()
+        if len(self.border) != 0:
+            flipval = self.mirror()
+            self.fitinit = [flipval, 2.0,self.center[1], 2.0, 0.]
         
     def run_fit(self):
         #to change the kind of border fit used, alter this line
-        self.odrfit_m()
+        if len(self.mborder)!=0:
+            self.odrfit_m()
 
     def run_post(self):
         #turned off this guard to see if large ones are being tossed
@@ -687,9 +912,54 @@ class shadow(object):
                 self.border+= [[i[0]-.5, i[1]-.5]]
                 if not top:
                     self.mborder+= [[i[0], i[1]-.5]]
-                    self.mborder+= [[i[0]-.5, i[1]-.5]] 
+                    self.mborder+= [[i[0]-.5, i[1]-.5]]
+    def findborder_cents(self):
+        '''
+        Alternate method for finding the shadow border, uses pixel cetners rather than pixel edges
+        This may generally struggle with shadows that are linear
+        must set self.border, self.mborder, self.flipaxis in otder to swap in for findborder
+        '''
+
+        #quick check for linear shadows and small shadows, these need to be tossed
+        xs = [i[1] for i in self.pixels]
+        ys = [i[0] for i in self.pixels]
+        if min(xs) == max(xs) or min(ys) == max(ys):
+            #this is a linear shadows, it will bomb the ODR fitting
+            return
+        if len(self.pixels) <=minA:
+            return
+        for i in self.pixels:
+            top=False
+            other = False
+            bord = False
+            mirror = False
+            if [i[0]-1,i[1]] not in self.pixels:
+                self.border+= [i]
+                self.flipaxis+= [[i[0]-.5,i[1]]]
+                top = True
+                bord = True
+                
+            if [i[0]+1,i[1]] not in self.pixels:
+                self.mborder+= [i]
+                mirror = True
+                if not bord:
+                    self.border+= [i]
+                    
+            if [i[0],i[1]+1] not in self.pixels:
+                if not bord:
+                    self.border+= [i]
+                if not top and not mirror:
+                    self.mborder+= [i]
+                    
+            if [i[0],i[1]-1] not in self.pixels:
+                if not bord:
+                    self.border+= [i]
+                if not top and not mirror:
+                    self.mborder+= [i]
+        return
+        
     def mirror(self):
-        ''' this takes the boulder shadow and border and flips it along the
+        ''' this takes the boulder shadow and border and flips it over the
             sun_perpendicular vector, which is the x axis in all cases.
             By  doing this we can fit an ellipse to what is actually an ellipse,
             theoretically giving better fits. the points flip along the MIN (most sunward)
@@ -701,6 +971,7 @@ class shadow(object):
         #this is the flip value
         #flipval = np.average(yvals)
         flipval = np.min(yvals)
+        self.mborder = [[float(k[0]),float(k[1])] for k in self.mborder]
         #make a copy of the mborder, which lacks the -y boundary
         temp = np.copy(self.mborder)
         dist = range(len(temp))
@@ -711,7 +982,8 @@ class shadow(object):
         temp = temp.tolist()
         #append it and you are done
         self.mborder+=temp
-        return
+        
+        return flipval
  
     def odrfit(self):
         #not used, odrfit_m is used
@@ -783,11 +1055,14 @@ class shadow(object):
         fit_model = odr.Model(self.ellipse, implicit=True)
         fit_odr = odr.ODR(fit_data, fit_model, self.fitinit)
         #print 'doing ODR'
+        
         fit_out = fit_odr.run()
+        
         #print 'ODR done'
         self.fitinfo = str(fit_out.info)
 
         self.fitbeta = fit_out.beta
+        self.fiterr = fit_out.sum_square
 
         area = abs(np.pi*self.fitbeta[1]*self.fitbeta[3])
         if area> MA or self.fitbeta[3]*2 > MD:
@@ -799,12 +1074,26 @@ class shadow(object):
         
     def shadowmeasure_m(self):
         '''shadow measuring now that we are doubling the shadow, very straightforward'''
+        if len(self.mborder) == 0:
+            self.bouldwid = mindist*2
+            self.shadlen = 0
+            self.bouldcent = self.center
+            self.measured = True
+            self.fitgood = True
+            self.fitbeta = [self.center[0],mindist,self.center[1],mindist,0]
+            self.bouldheight = self.shadlen/np.tan(np.radians(self.inangle))
+            self.bouldwid_m = self.bouldwid*self.resolution
+            self.shadlen_m = self.shadlen*self.resolution
+            self.bouldheight_m = self.bouldheight*self.resolution
+            return
         #despite not being constrained, the fit ellipses are pretty much either veritcal or horizonal
         # so np.cos(alpha) is essentially either 0,1, or -1, or at least close to it. With this
         #non-zero results (~1 or -1) will be negative, others will be positive
+        
         test = .5 - abs(np.cos(self.fitbeta[4]))
 
-        #build in exception here for small boulders? preserve them until merging can be done...
+        #build in exception here for small boulders
+        
         #with a minimum of four pixels, no problems were had
         
         if test <= 0:
@@ -840,7 +1129,11 @@ class shadow(object):
         alpha = beta[4]
         #alpha is the clockwise angle of rotation
         #alpha = np.arctan(self.sunangle[1]/self.sunangle[0])
-        return (((y-yc)*np.cos(alpha)+(x-xc)*np.sin(alpha))/ay)**2 + (((x-xc)*np.cos(alpha)-(y-yc)*np.sin(alpha))/ax)**2 - 1
+    
+        val = (((y-yc)*np.cos(alpha)+(x-xc)*np.sin(alpha))/ay)**2 + (((x-xc)*np.cos(alpha)-(y-yc)*np.sin(alpha))/ax)**2 - 1
+        
+        #print beta
+        return val
 ###Got doubled somehow, this one uses self.area (the area of the shadow) as opposed to marea (mirrored area, the double shadow area)
 ##    def AP_ellipse(self, beta, coords):
 ##        y = coords[0]
@@ -1378,7 +1671,7 @@ def FindIdealParams(filename, oldvals = False):
     return gam,bound
     
     
-def ExamineImage(runfile,num, showblanks):
+def ExamineImage(runfile,num, showblanks,filt = True):
     hasshads = True
 
     if hasshads:
@@ -1391,8 +1684,8 @@ def ExamineImage(runfile,num, showblanks):
                 dat = pickle.load(load)
             except EOFError:
                 break
-            patches1 += dat.patchplot(False)
-            patches2 +=dat.patchplot(False)
+            patches1 += dat.patchplot(filt)
+            patches2 +=dat.patchplot(filt)
         #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
         image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
@@ -1550,10 +1843,10 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
     '''
     if not os.path.exists('%sGISFiles//%s'%(PATH,runfile)):
         os.makedirs('%sGISFiles//%s'%(PATH,runfile))
-    datafile = open("%sGISFiles//%s%s_boulderdata.csv"%(PATH,runfile,FNM),'w')
-    datafile2 = open("%sGISFiles//%s%s_DEFINITEboulderdata.csv"%(PATH,runfile,FNM),'w')
+    datafile = open("%sGISFiles//%s%s_All_boulderdata.csv"%(PATH,runfile,FNM),'w')
+    datafile2 = open("%sGISFiles//%s%s_Confident_boulderdata.csv"%(PATH,runfile,FNM),'w')
     #put in the headers, we will start small with the boulders:
-    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen,measured,fitgood\n'
+    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen,measured,fitgood,fiterr\n'
     datafile.write(headers)
     datafile2.write(headers)
     #bring in the original rotation information
@@ -1594,6 +1887,11 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
                 bouldwid_m = dat.bouldwid_m
                 bouldheight_m = dat.bouldheight_m
                 shadlen = dat.shadlen
+                AR = float(bouldheight_m/bouldwid_m)
+                try:
+                    fiterr = dat.fiterr
+                except:
+                    fiterr = None
                 #GIS doesnt like mixing data types in csv
                 measured = int(dat.measured)
                 fitgood = int(dat.fitgood)
@@ -1620,9 +1918,14 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
             xmap = constants[0]*xpos_rot + constants[2]*ypos_rot + constants[4]
             ymap = constants[1]*xpos_rot + constants[3]*ypos_rot + constants[5]
             #write it all down
-            info = '%s,%s,%s,%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m,shadlen,measured,fitgood)
+            info = '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m,shadlen,measured,fitgood,fiterr)
             datafile.write(info)
-            if measured:
+            #putting the aspect ratio filter in here, going to use numbers based on Demidov and Basilevsky 2014
+            #average = ~.5
+            #stdev = ~.28
+            #low boundary = .22
+            #high boundary = .78
+            if measured and AR>.22 and AR<.78:
                 datafile2.write(info)
                 
                 

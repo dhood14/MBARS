@@ -29,13 +29,13 @@ Catch all code to look at results
 #filename = 'ESP_036437_2290_RED500PX'
 
 #Sholes Images
-filename = 'PSP_007718_2350_'
+#filename = 'PSP_007718_2350_'
 #filename = 'PSP_007718_2350_RED300px'
-runfile='gam600_manbound102//'
+#runfile='gam600_manbound99//'
 
 #Golombek Comparison Images
-#filename = 'TRA_000828_2495_RED500PX'
-#runfile = 'gam600_manbound159//'
+filename = 'TRA_000828_2495_RED500PX'
+runfile = 'gam600_manbound159//'
 #filename = 'PSP_001391_2465_RED500PX'
 #runfile = 'gam600_manbound135//'
 
@@ -72,7 +72,7 @@ ManualMerge = False
 OutToGIS = True
 MakeCFAs = False
 bigs = False
-imageanalysis = False
+imageanalysis = True
 
 #Can manually reduce the panels to look at results subsets
 #panels = 3000
