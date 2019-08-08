@@ -25,6 +25,7 @@ import skimage.util as skutil
 import sklearn.cluster as skcluster
 from scipy.ndimage import filters
 import scipy.stats as sps
+import scipy.signal as spsig
 import imageio
 import threading
 
@@ -202,6 +203,149 @@ def gauss_unnorm(x,sig,mu):
     y = np.exp((-1/2)*((x-mu)/sig)**2)
     return y
 
+def autobound(num,bound):
+    ''' An automatic boundary-finder for HiRISE images, relies on input statistics
+'''
+   
+    runfile = 'autobound//'
+    if not os.path.exists('%s%s'%(PATH,runfile)):
+        try:
+            os.makedirs('%s%s'%(PATH,runfile))
+        except(WindowsError):
+            #this is in case two threads try and make something at the same time
+            #is it dirty? yes, does it work? also yes.
+            pass
+    try:
+       image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
+    except(ValueError, SyntaxError):
+        return None, False, runfile
+
+    if not np.any(image.flatten()):
+        return None, False, runfile
+    image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
+    image = npma.masked_equal(image, 0)
+
+    ''' rotation seems to cause some stray data to appear at the edge, this is often
+        categorized as shadows because it is very dark but not zero, this code will
+        essentially erode the edges a bit, shifting the mask up, down, left and right
+        and taking the logical OR of the two masks, masking things that are adjacent to
+        the mask in any direction
+        '''
+    shift = np.roll(image.mask,1,1)
+    image.mask = np.logical_or(image.mask, shift)
+    shift = np.roll(image.mask,-1,1)
+    image.mask = np.logical_or(image.mask, shift)
+    shift = np.roll(image.mask,1,0)
+    image.mask = np.logical_or(image.mask, shift) 
+    shift = np.roll(image.mask,-1,0)
+    image.mask = np.logical_or(image.mask, shift)
+    
+    imageseg = npma.copy(image)
+    imageseg = imageseg.astype(float)
+    imageseg = imageseg.filled(-1)
+
+    imageseg[imageseg>bound+1] = bound+1
+    imageseg = npma.masked_equal(imageseg, -1)    
+    imageseg = imageseg.astype(int)
+    imageseg.fill_value = 0
+    
+    imageseg.dump("%s%s%s%s_SEG.npy"%(PATH,runfile,FNM,num))
+    
+    #guard against images with no shadows
+    if np.min(imageseg)>= bound:
+        good = False
+    else:
+        good=True
+    
+    return(imageseg, good, runfile)
+
+def getimagebound(panels):
+    '''TO retrieve the overall image stats and calculate the absolute shadow boundary'''
+    bins = np.linspace(0,1023,1024)
+    bins = map(int,bins)
+    hist = None
+    cum_hist = None
+    #panels = 400
+    for i in range(0,panels):
+        #print i
+        im = imageio.imread('%s%s%s.PNG'%(PATH,FNM,i))
+        n,bins = np.histogram(im,bins)
+        #cum_n,bins,c=plt.hist(im.flatten(),bins,cumulative=True)
+        n[0] = 0
+        if i==0:
+            hist = n
+            #cum_hist = cum_n
+        else:
+            hist+=n
+        #print hist
+            #cum_hist+=cum_n
+    #we have the histogram for the whole image now.
+    #kill the zeros
+    #hist[0] = 0
+    mode = np.argmax(hist)
+    #make and normalize the cumulative histogram
+    cum_hist = np.cumsum(hist)
+    ncum_hist = cum_hist/float(max(cum_hist))
+    #this is now a map to the actual image distribution
+    runs = 100
+    #this is important, what boundary should be chosen? I am going with the
+    #average of the 95th percentile
+    stats = []
+    for i in range(runs):
+        img = ImageMaker(ncum_hist,bins)
+        #.77 for the lorentzian taken from
+        #Kirk et al 2008, 10.1029/2007JE003000
+        img_con = convolve_lorentzPSF(img,.77,mode)
+        shad_con = img_con[20:30,20:30]
+        stat = np.percentile(shad_con,100)
+        stats+=[stat]
+
+        
+    bound = np.average(stats)
+
+    #return bound,ncum_hist,hist
+    return bound
+
+def ImageMaker(mapping_hist,mapping_bins,dimx=50,dimy=50):
+    ''' returns a value from the HiRISE image population, meant to replicate what I see in MBARS'''
+       
+    img = np.random.rand(dimy,dimx)
+    for i in range(len(img)):
+        for j in range(len(img[0])):
+            for k in range(len(mapping_hist)):
+                if mapping_hist[k]>=img[i][j]:
+                    img[i][j] = mapping_bins[k]    
+    img[20:30,20:30] = 1
+    return img
+    
+def convolve_lorentzPSF(image,avg,gam=.77):
+    '''convolve an array with a lorentzian HiRISE PSF'''
+    kern = lorentz_kern(101,gam)
+    newimage=spsig.convolve2d(image,kern,mode='same',fillvalue=avg)
+    return newimage
+    
+def lorentz(x,xo,gam):
+    #this is a lorentzian, a more accurate PSF for HiRISE
+    l = (1/(np.pi*gam))*((gam**2)/(((x-xo)**2)+gam**2))
+    return l
+
+def lorentz_kern(dim=101,gam=.77):
+    #method to make a square lorentzian kernal for deconvolution
+    #VERY IMPORTANT, MUST BE ODD numbered
+    if dim%2==0:
+        print("Must be odd, adding 1 to dim")
+        dim+=1
+    kern = np.empty((dim,dim))
+    mid = dim/2
+    for i in range(len(kern)):
+        for j in range(len(kern[0])):
+            y= i-mid
+            x = j-mid
+            r = np.sqrt(y**2+x**2)
+            kern[i][j] = lorentz(r,0,gam)
+    total = sum(kern.flatten())
+    kern = kern/total
+    return(kern)
 
 #########This is the measuring side of things#####################################
 
@@ -309,7 +453,7 @@ def watershedmethod(image):
             flag+=1
         elif labels[i] not in excl:
             view[points[i][0]][points[i][1]] = flag
-            excl+=[flag]
+            excl+=[labels[i]]
             flag+=1
 
     #this will make the mask on view mask out the originally masked points (outside data)
@@ -626,15 +770,21 @@ def overlapcheck_shadbased(num,runfile,odr_keycard):
                 boulds+=[rock]
                 #if the rock is one of the big ones, anything is an improvement
                 if rock.bouldwid > MD:
-                    avg_fiterr+=100
+                    avg_fiterr+=1000
                     
                 elif rock.fiterr:
                     avg_fiterr+=rock.fiterr
                 else:
-                    avg_fiterr+=100
+                    avg_fiterr+=1000
                 all_pixels+=rock.pixels
         base_flag = boulds[0].flag
-        avg_fiterr = avg_fiterr/(float(len(clust)))
+        #identify areas that are way too big, likely shadow-casting topography
+        if len(all_pixels) > 5000:
+            #print base_flag
+            #print (len(all_pixels))
+            continue
+            
+        avg_fiterr = avg_fiterr
         #now, merge the pixels and see if it is better.
         newbould=shadow(base_flag, all_pixels, boulds[0].im_area)
         newbould.run_prep()
@@ -648,19 +798,24 @@ def overlapcheck_shadbased(num,runfile,odr_keycard):
         if newbould.fiterr and newbould.fiterr < avg_fiterr and newbould.bouldwid < MD:
             pickle.dump(newbould,shadow_file)
             #report+=['New boulder was better']
-        #the new one is not better, consider subdividing?
+     
+        #this is the method where we filter based on connectivity scores, 
+##        else:
+##            #report+=['old boulders were better']
+##            #OK, lets attempt to calculate "connectivity", the sum of adjacency scores:
+##            connectivity = []
+##            for rock in boulds:
+##                connect = sum([a[2] for a in adjacency if a[0] == rock.flag or a[1] == rock.flag])
+##                connectivity+=[connect]
+##            #zip connectivity into the boulds list
+##            boulds = [list(a) for a in zip(boulds,connectivity)]
+##            #print'Entering Recursive Portion'
+##            #print (zip([a[0].flag for a in boulds],connectivity))
+##            exclusive_shadowmerge(boulds,2,shadow_file,odr_keycard)
+        #Lets try a k-means based method
         else:
-            #report+=['old boulders were better']
-            #OK, lets attempt to calculate "connectivity", the sum of adjacency scores:
-            connectivity = []
-            for rock in boulds:
-                connect = sum([a[2] for a in adjacency if a[0] == rock.flag or a[1] == rock.flag])
-                connectivity+=[connect]
-            #zip connectivity into the boulds list
-            boulds = [list(a) for a in zip(boulds,connectivity)]
-            #print'Entering Recursive Portion'
-            #print (zip([a[0].flag for a in boulds],connectivity))
-            exclusive_shadowmerge(boulds,2,shadow_file,odr_keycard)
+            #print newbould.bouldwid
+            kmeans_shadowmerge(boulds,shadow_file,odr_keycard,avg_fiterr)
             
             
     return
@@ -700,6 +855,85 @@ def exclusive_shadowmerge(boulds,mincon,shadowfile,odr_keycard):
     else:
         for rock in boulds:
             pickle.dump(rock[0],shadowfile)
+
+def kmeans_shadowmerge(boulds,shadowfile,odr_keycard,avg_fiterr):
+    #boudlds is a list of shadow objects, shadowfile is the targeted shadow file, should be in "write" mode
+    #odr-keycard is the thread lock object to prevent multiple access to ODR, maxboulds is the highest k-means will go
+    #avg_fiterr is the average fit error on the original boulders, we have to be better
+    all_pixels = [b for a in boulds for b in a.pixels]
+    #this is a list of all flags, maxbolds is limited by the length of this list
+    all_flags = [a.flag for a in boulds]
+    maxboulds = len(all_flags)
+    newerrs_list = []
+    newboulds_list = []
+    #print all_flags
+    for i in range(2,maxboulds+1):
+        #lets try manually seeding to limit splits along the sun-line
+        #by seeding the k-means as an equal x-spread, this should strongly favor lateral boulders rather than vertical
+        minx = min([a[1] for a in all_pixels])
+        maxx = max([a[1] for a in all_pixels])
+        avgy = np.average([a[0] for a in all_pixels])
+        #make a linspace that goes from min to max, then remove the ends.
+        seeds  = list(np.linspace(minx,maxx,i+2))
+        seeds.pop(0)
+        seeds.pop(-1)
+        seeds = map(lambda x: (x,avgy),seeds)
+        seeds = [list(a) for a in seeds]
+        seeds = np.array(seeds)
+        #kmeans = skcluster.KMeans(n_clusters=i,init = seeds).fit(all_pixels)
+        kmeans = skcluster.KMeans(n_clusters=i).fit(all_pixels)
+        labelpix = [list(a) for a in zip(kmeans.labels_,all_pixels)]
+        #cents = kmeans.cluster_centers_
+        #print(kmeans.labels_)
+        #for display purposes
+        #print(kmeans.cluster_centers_)
+##        cols = [a[0] for a in labelpix]
+##        ys = [a[1][0] for a in labelpix]
+##        xs = [a[1][1] for a in labelpix]
+##        plt.scatter(xs,ys,c=cols,cmap='rainbow')
+##        plt.show()
+
+        #check if this is a good fit!
+        newboulds = []
+        new_fiterr = 0
+        for j in range(i):
+            pix = []
+            for a in labelpix:
+                if a[0] == j:
+                    pix+=[a[1]]
+            newbould = shadow(all_flags[j],pix,boulds[0].im_area)
+            newbould.run_prep()
+            with odr_keycard:
+                newbould.run_fit()
+            newbould.run_post()
+            newboulds+=[newbould]
+            if newbould.bouldwid > MD:
+                new_fiterr+=1000
+            elif newbould.fiterr:
+                new_fiterr+=newbould.fiterr
+            else:
+                new_fiterr+=1000
+        new_fiterr = new_fiterr
+        #add the results to these list
+        newerrs_list+=[new_fiterr]
+        newboulds_list+=[newboulds]
+    #pick the best solution:
+    #print avg_fiterr
+    #print min(newerrs_list)
+    if min(newerrs_list)<= avg_fiterr:
+        #we found a better solution
+        #print "%s is best fit"%(np.argmin(newerrs_list)+2)
+        final_boulders = newboulds_list[np.argmin(newerrs_list)]
+        for i in final_boulders:
+            pickle.dump(i,shadowfile)
+    else:
+        #no better solution was found
+        #print "no better fit was found"
+        for i in boulds:
+            pickle.dump(i,shadowfile)
+    return()
+            
+                    
             
                          
 def touch(array,pos,wid,indflag,indpos,indwid,ind, plus=False,minus=False):
@@ -1688,13 +1922,16 @@ def ExamineImage(runfile,num, showblanks,filt = True):
             patches2 +=dat.patchplot(filt)
         #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
         image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
+        segimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
+        #segimage = sktrans.rotate(segimage,ROTANG, resize=True, preserve_range=True)
         image = npma.masked_equal(image, 0)
         filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num))
+        
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
         ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
-        ax[1][0].imshow(filtimage,interpolation='none')
+        ax[1][0].imshow(segimage,interpolation='none')
         ax[1][1].imshow(filtimage,interpolation='none')
         for j in patches1:
             ax[0][1].add_patch(j)

@@ -18,8 +18,10 @@ filenames = []
 #filenames  = [filenameB,filenameC,filenameD]
 
 #GOlombek Comparison Images
-filenames += ['TRA_000828_2495_RED500PX']
+#filenames += ['TRA_000828_2495_RED500PX']
+#filenames +=['TRA_000828_2495_RED_16bit']
 #filenames += ['PSP_001391_2465_RED500PX']
+#filenames += ['PSP_001391_2465_RED16bit500PX']
 
 #viking 1 lander setup:
 ##filenameAA = 'PSP_001521_2025_RED100PNL47_500PX'
@@ -35,6 +37,7 @@ filenames += ['TRA_000828_2495_RED500PX']
 
 #PSP_007718 subset images
 #filenames = ['PSP_007718_2350_']
+filenames = ['PSP_007718_2350_RED16bit500PX']
 #filenames += ['PSP_007718_2350_RED300px']
 
 #JoesImages
@@ -92,10 +95,11 @@ def run(filename,plot,startat):
     return
 
 
-def core(num,gam,plot,manbound,odr_keycard):
+def core(num,gam,plot,manbound,bound,odr_keycard):
     '''core function of the run file, does gamfun and boulder detect
     '''
-    seg, good, runfile = MBARS.gamfun(num,gam, plot,manbound)
+    #seg, good, runfile = MBARS.gamfun(num,gam, plot,manbound)
+    seg,good,runfile = MBARS.autobound(num,bound)
     #print 'step 1 done'
     if good:
         if any(seg.compressed()):
@@ -112,14 +116,17 @@ def thread_run(filename,plot,startat):
 
     MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(MBARS.FNM)
     MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
-    mangam,manbound = MBARS.FindIdealParams(filename,True)
+    #mangam,manbound = MBARS.FindIdealParams(filename,True)
+    bound = MBARS.getimagebound(panels)
+    mangam = 0
+    manbound = 0
     t1 = time.clock()
     
     threads = []
     krange = range(startat,panels)
     print '%s images to run'%(panels)
     odr_keycard = threading.Lock()
-    threads = [threading.Thread(target = core, args=(a,mangam,plot,manbound,odr_keycard),name='%s'%(a)) for a in krange]
+    threads = [threading.Thread(target = core, args=(a,mangam,plot,manbound,bound,odr_keycard),name='%s'%(a)) for a in krange]
     count=0
     for i in range(len(threads)):
         runfile = threads[i].start()
@@ -149,8 +156,8 @@ def thread_run(filename,plot,startat):
     record.close()
     return
 #setup all the parameters before running
-for i in filenames:
-    mangam, manbound = MBARS.FindIdealParams(i)
+#for i in filenames:
+    #mangam, manbound = MBARS.FindIdealParams(i)
     
 for i in filenames:
     if NOTHREADS:

@@ -31,12 +31,17 @@ Catch all code to look at results
 #Sholes Images
 #filename = 'PSP_007718_2350_'
 #filename = 'PSP_007718_2350_RED300px'
-#runfile='gam600_manbound99//'
+filename = 'PSP_007718_2350_RED16bit500px'
+runfile='autobound//'
+#runfile='gam600_manbound102//'
 
 #Golombek Comparison Images
-filename = 'TRA_000828_2495_RED500PX'
-runfile = 'gam600_manbound159//'
+#filename = 'TRA_000828_2495_RED500PX'
+#filename = 'TRA_000828_2495_RED_16bit'
+#runfile = 'autobound//'
+#runfile = 'gam600_manbound159//'
 #filename = 'PSP_001391_2465_RED500PX'
+#filename = 'PSP_001391_2465_RED16bit500PX'
 #runfile = 'gam600_manbound135//'
 
 #viking 1 lander images:
