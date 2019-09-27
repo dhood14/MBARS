@@ -24,20 +24,22 @@ filenames = []
 #filenames += ['PSP_001391_2465_RED16bit500PX']
 
 #viking 1 lander setup:
-##filenameAA = 'PSP_001521_2025_RED100PNL47_500PX'
-#filenameBB = 'PSP_001719_2025_RED100PNL52_500PX'
-#filenameCC = 'ESP_046170_2025_RED_100PNL52_500PX'
-#filenames = [filenameCC]
+
+filenames += ['PSP_001521_2025_RED16bit100PNL44']
+#filenames +=['PSP_001719_2025_RED16bit100PNL52_500PX']
+#filenames +=['ESP_046170_2025_RED16bit100PNL52_500PX']
+
+
 
 #viking 2 lander images
-#filenameA = 'PSP_001501_2280_RED100PNL47_500PX'
-#filenameB = 'PSP_001976_2280_RED100PNL52_500PX'
-#filenameC = 'PSP_002055_2280_RED100PNL57_500PX'
-#filenames = [filenameA]
+#filenames+=['PSP_001976_2280_RED16bit100PNL52_500PX']
+#filenames+=['PSP_002055_2280_RED16bit100PNL57_500PX']
+#filenames+=['PSP_001501_2280_RED16bit100PNL47']
+
 
 #PSP_007718 subset images
 #filenames = ['PSP_007718_2350_']
-filenames = ['PSP_007718_2350_RED16bit500PX']
+#filenames += ['PSP_007718_2350_RED16bit500PX']
 #filenames += ['PSP_007718_2350_RED300px']
 
 #JoesImages
@@ -45,6 +47,7 @@ filenames = ['PSP_007718_2350_RED16bit500PX']
 
 #Proposal Test Images
 #filenames += ['PSP_001415_2470_RED500PX']
+#filenames+= ['PSP_001415_2470_RED16bit500PX']
 
 
 ######SOME CONTROLS###################

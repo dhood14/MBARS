@@ -260,7 +260,10 @@ def autobound(num,bound):
     return(imageseg, good, runfile)
 
 def getimagebound(panels):
-    '''TO retrieve the overall image stats and calculate the absolute shadow boundary'''
+    '''TO retrieve the overall image stats and calculate the absolute shadow boundary
+
+    assumes a 2-pixel wide (4 total pixels) shadow to the minimum shadow size'''
+
     bins = np.linspace(0,1023,1024)
     bins = map(int,bins)
     hist = None
@@ -283,25 +286,32 @@ def getimagebound(panels):
     #kill the zeros
     #hist[0] = 0
     mode = np.argmax(hist)
+    #print mode
     #make and normalize the cumulative histogram
     cum_hist = np.cumsum(hist)
     ncum_hist = cum_hist/float(max(cum_hist))
     #this is now a map to the actual image distribution
     runs = 100
     #this is important, what boundary should be chosen? I am going with the
-    #average of the 95th percentile
+    #average of the 100th percentile
     stats = []
     for i in range(runs):
         img = ImageMaker(ncum_hist,bins)
+        #plt.imshow(img)
+        #plt.show()
         #.77 for the lorentzian taken from
         #Kirk et al 2008, 10.1029/2007JE003000
-        img_con = convolve_lorentzPSF(img,.77,mode)
-        shad_con = img_con[20:30,20:30]
+        img_con = convolve_lorentzPSF(img,mode,.77)
+        #plt.imshow(img_con)
+        #plt.show()
+        #shadow size comes in HERE, must be same as below
+        shad_con = img_con[25:30,25:30]
         stat = np.percentile(shad_con,100)
         stats+=[stat]
 
-        
+   
     bound = np.average(stats)
+    print ("Selected boundary at %s"%(bound))
 
     #return bound,ncum_hist,hist
     return bound
@@ -314,14 +324,16 @@ def ImageMaker(mapping_hist,mapping_bins,dimx=50,dimy=50):
         for j in range(len(img[0])):
             for k in range(len(mapping_hist)):
                 if mapping_hist[k]>=img[i][j]:
-                    img[i][j] = mapping_bins[k]    
-    img[20:30,20:30] = 1
+                    img[i][j] = float(mapping_bins[k])
+    #shadow size comes in here, must be same as above
+    img[25:30,25:30] = 1
     return img
     
 def convolve_lorentzPSF(image,avg,gam=.77):
     '''convolve an array with a lorentzian HiRISE PSF'''
-    kern = lorentz_kern(101,gam)
-    newimage=spsig.convolve2d(image,kern,mode='same',fillvalue=avg)
+    kern = lorentz_kern(31,gam)
+    #print avg
+    newimage=spsig.convolve2d(image,kern,mode='same',boundary='fill',fillvalue=avg)
     return newimage
     
 def lorentz(x,xo,gam):
@@ -329,7 +341,7 @@ def lorentz(x,xo,gam):
     l = (1/(np.pi*gam))*((gam**2)/(((x-xo)**2)+gam**2))
     return l
 
-def lorentz_kern(dim=101,gam=.77):
+def lorentz_kern(dim=21,gam=.77):
     #method to make a square lorentzian kernal for deconvolution
     #VERY IMPORTANT, MUST BE ODD numbered
     if dim%2==0:
@@ -339,12 +351,14 @@ def lorentz_kern(dim=101,gam=.77):
     mid = dim/2
     for i in range(len(kern)):
         for j in range(len(kern[0])):
-            y= i-mid
-            x = j-mid
+            y= float(i-mid)
+            x = float(j-mid)
             r = np.sqrt(y**2+x**2)
             kern[i][j] = lorentz(r,0,gam)
     total = sum(kern.flatten())
     kern = kern/total
+    #plt.imshow(kern)
+    #plt.show()
     return(kern)
 
 #########This is the measuring side of things#####################################
@@ -1085,6 +1099,7 @@ class shadow(object):
         #height of boulder in pixels and meters
         self.bouldheight = None
         self.bouldheight_m = None
+        self.bouldheight_m_actual = None
         #center of fit ellipse
         self.bouldcent = [None, None]
         #semi-axis along the sun direction in pixels and meters
@@ -2162,7 +2177,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
             #stdev = ~.28
             #low boundary = .22
             #high boundary = .78
-            if measured and AR>.22 and AR<.78:
+            if shadlen!=0 and bouldwid_m>1.5:
                 datafile2.write(info)
                 
                 

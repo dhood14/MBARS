@@ -31,14 +31,14 @@ Catch all code to look at results
 #Sholes Images
 #filename = 'PSP_007718_2350_'
 #filename = 'PSP_007718_2350_RED300px'
-filename = 'PSP_007718_2350_RED16bit500px'
-runfile='autobound//'
+#filename = 'PSP_007718_2350_RED16bit500px'
+#runfile='autobound//'
 #runfile='gam600_manbound102//'
 
 #Golombek Comparison Images
 #filename = 'TRA_000828_2495_RED500PX'
 #filename = 'TRA_000828_2495_RED_16bit'
-#runfile = 'autobound//'
+runfile = 'autobound//'
 #runfile = 'gam600_manbound159//'
 #filename = 'PSP_001391_2465_RED500PX'
 #filename = 'PSP_001391_2465_RED16bit500PX'
@@ -46,13 +46,22 @@ runfile='autobound//'
 
 #viking 1 lander images:
 #filename = 'PSP_001521_2025_RED100PNL47_500PX'
+filename = 'PSP_001521_2025_RED16bit100PNL44'
 #filename = 'PSP_001719_2025_RED100PNL52_500PX'
 #filename = 'ESP_046170_2025_RED_100PNL52_500PX'
+
+#filename = 'PSP_001521_2025_RED16bit100PNL44'
+#filename ='PSP_001719_2025_RED16bit100PNL52_500PX'
+#filename ='ESP_046170_2025_RED16bit100PNL52_500PX'
 
 #Viking 2 lander:
 #filename = 'PSP_001501_2280_RED100PNL47_500PX'
 #filename = 'PSP_001976_2280_RED100PNL52_500PX'
 #filename = 'PSP_002055_2280_RED100PNL57_500PX'
+
+#filename='PSP_001976_2280_RED16bit100PNL52_500PX'
+#filename='PSP_002055_2280_RED16bit100PNL57_500PX'
+#filename='PSP_001501_2280_RED16bit100PNL47'
 
 #Joes Images
 #filename = 'PSP_007693_2300_RED500PX'
@@ -61,6 +70,8 @@ runfile='autobound//'
 #Proposal Test Images
 #filename = 'PSP_001415_2470_RED500PX'
 #runfile = 'gam600_manbound85//'
+#filename = 'PSP_001415_2470_RED16bit500PX'
+#runfile='autobound//'
 
 #specify which running file to examine, include '//' on the end of the name
 
