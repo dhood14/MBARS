@@ -19,13 +19,13 @@ filenames = []
 
 #GOlombek Comparison Images
 #filenames += ['TRA_000828_2495_RED500PX']
-#filenames +=['TRA_000828_2495_RED_16bit']
+filenames +=['TRA_000828_2495_RED_16bit']
 #filenames += ['PSP_001391_2465_RED500PX']
-#filenames += ['PSP_001391_2465_RED16bit500PX']
+filenames += ['PSP_001391_2465_RED16bit500PX']
 
 #viking 1 lander setup:
 
-filenames += ['PSP_001521_2025_RED16bit100PNL44']
+#filenames += ['PSP_001521_2025_RED16bit100PNL44']
 #filenames +=['PSP_001719_2025_RED16bit100PNL52_500PX']
 #filenames +=['ESP_046170_2025_RED16bit100PNL52_500PX']
 
@@ -47,7 +47,7 @@ filenames += ['PSP_001521_2025_RED16bit100PNL44']
 
 #Proposal Test Images
 #filenames += ['PSP_001415_2470_RED500PX']
-#filenames+= ['PSP_001415_2470_RED16bit500PX']
+filenames+= ['PSP_001415_2470_RED16bit500PX']
 
 
 ######SOME CONTROLS###################
@@ -58,45 +58,9 @@ plot = False
 #Keep in  mind that threaded runs do not complete the files in order, use with caution
 startat = 0
 
-#mostly deprecated, uses manually determined boundaries
-### parameters
-##gams = [.6]
-##bounds = [.10]
-
 #Process is largely processer-limited, so benefit to large number of threads is minimal
 #setting no limit causes memory errors.
 thread_limit = 2
-#make true  if you want to run without threads
-NOTHREADS = False
-
-def run(filename,plot,startat):
-    '''for running in a non-threaded fashion if desired'''
-    #retrieve running parameters
-    mangam, manbound = MBARS.FindIdealParams(filename)
-
-    #setup paths and filenames
-    MBARS.FNM, MBARS.ID, MBARS.NOMAP,panels = MBARS.RunParams(filename)
-    MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(MBARS.FNM)
-    MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
-
-    t1 = time.clock()
-    for i in range(startat,panels):
-        runfile = core(i,mangam,plot,manbound,True)
-        if i%500 == 0:
-            print '\n===========done %s out of %s==============\n'%(i,panels)
-        startat = 0
-    t2 = time.clock()
-    ttime = (t2-t1)/3600.
-    print ('total time: '+str(ttime)+'hours')
-
-    #this is to note the last running conditions:
-    string = "This image was last run with the parameters mangam = %s, manbound=%s. \nIt took %s hours"%(mangam,manbound,ttime)
-    record = open('%s%s%s_runinfo.txt'%(MBARS.PATH,runfile,MBARS.FNM),'w')
-    for item in string:
-        record.write(item)
-    record.close()
-    return
-
 
 def core(num,gam,plot,manbound,bound,odr_keycard):
     '''core function of the run file, does gamfun and boulder detect
@@ -158,15 +122,13 @@ def thread_run(filename,plot,startat):
         record.write(item)
     record.close()
     return
+
 #setup all the parameters before running
 #for i in filenames:
     #mangam, manbound = MBARS.FindIdealParams(i)
     
 for i in filenames:
-    if NOTHREADS:
-        run(i,plot,startat)
-    else:
-        thread_run(i,plot,startat)
+    thread_run(i,plot,startat)
 
 
 

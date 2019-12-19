@@ -37,7 +37,7 @@ Catch all code to look at results
 
 #Golombek Comparison Images
 #filename = 'TRA_000828_2495_RED500PX'
-#filename = 'TRA_000828_2495_RED_16bit'
+filename = 'TRA_000828_2495_RED_16bit'
 runfile = 'autobound//'
 #runfile = 'gam600_manbound159//'
 #filename = 'PSP_001391_2465_RED500PX'
@@ -46,7 +46,7 @@ runfile = 'autobound//'
 
 #viking 1 lander images:
 #filename = 'PSP_001521_2025_RED100PNL47_500PX'
-filename = 'PSP_001521_2025_RED16bit100PNL44'
+#filename = 'PSP_001521_2025_RED16bit100PNL44'
 #filename = 'PSP_001719_2025_RED100PNL52_500PX'
 #filename = 'ESP_046170_2025_RED_100PNL52_500PX'
 
@@ -88,7 +88,7 @@ ManualMerge = False
 OutToGIS = True
 MakeCFAs = False
 bigs = False
-imageanalysis = True
+imageanalysis = False
 
 #Can manually reduce the panels to look at results subsets
 #panels = 3000

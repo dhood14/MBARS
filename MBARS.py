@@ -154,11 +154,6 @@ def gamfun(num,gam=.6, plot=False, manualbound = 130,quickrun = False):
     bound = float(manualbound)
     
     #print ("Shadow value boundary at:%s"%(bound))
-##    imageseg = np.zeros_like(imagemod, dtype=np.uint32)
-##    for i in range(len(image)):
-##        for j in range(len(image[0])):
-##            if imagemod[i][j] >bound:
-##                imageseg[i][j]=1
     #doing the indexing in the fastest way always passes the mask, so we are unmasking
     #filling in the values with an impossible number, then putting it all back in
     imageseg = npma.copy(image)
@@ -289,6 +284,9 @@ def getimagebound(panels):
     #print mode
     #make and normalize the cumulative histogram
     cum_hist = np.cumsum(hist)
+    #print hist
+    #plt.plot(hist)
+    #plt.show()
     ncum_hist = cum_hist/float(max(cum_hist))
     #this is now a map to the actual image distribution
     runs = 100
@@ -305,8 +303,14 @@ def getimagebound(panels):
         #plt.imshow(img_con)
         #plt.show()
         #shadow size comes in HERE, must be same as below
-        shad_con = img_con[25:30,25:30]
-        stat = np.percentile(shad_con,100)
+        shad_con = img_con[25:35,25:35]
+        #for a 5x5 shadow, only certain percentiles are meaningful
+        #100 for max, 84, 52 are next cutoffs
+        #Probably the correct answer for this is a circle inscribed on a square
+        #prop = 100*np.pi/4.
+        #that was too generous, but 52 was too low, lets try 64
+        prop = 64
+        stat = np.percentile(shad_con,prop)
         stats+=[stat]
 
    
@@ -326,7 +330,7 @@ def ImageMaker(mapping_hist,mapping_bins,dimx=50,dimy=50):
                 if mapping_hist[k]>=img[i][j]:
                     img[i][j] = float(mapping_bins[k])
     #shadow size comes in here, must be same as above
-    img[25:30,25:30] = 1
+    img[25:35,25:35] = 1
     return img
     
 def convolve_lorentzPSF(image,avg,gam=.77):
@@ -361,7 +365,7 @@ def lorentz_kern(dim=21,gam=.77):
     #plt.show()
     return(kern)
 
-#########This is the measuring side of things#####################################
+#########This is the measuring side of the code#####################################
 
 def boulderdetect(num,image,runfile):
     #deprecated, uses threadsafe version now
@@ -422,7 +426,7 @@ def boulderdetect_threadsafe(num,image,runfile,odr_keycard):
         #must be converted to list for the neighbor-checking function to work
         pixels = pixels.tolist()
         
-        if len(pixels)<MA and len(pixels)>0:
+        if len(pixels)<MA and len(pixels)>minA:
             
             shade = shadow(i, pixels, im_area)
             
@@ -1232,49 +1236,8 @@ class shadow(object):
         #append it and you are done
         self.mborder+=temp
         
-        return flipval
- 
-    def odrfit(self):
-        #not used, odrfit_m is used
-        input_y = list(map(lambda f:f[0], self.border))
-        input_x = list(map(lambda f:f[1], self.border))
-        input_dat = [input_y, input_x]
-        fit_data = odr.Data(input_dat, y=1)
-        fit_model = odr.Model(self.ellipse, implicit=True)
-        fit_odr = odr.ODR(fit_data, fit_model, self.fitinit)
-        fit_out = fit_odr.run()
-        self.fitinfo = str(fit_out.info)
-
-        cutoff = 75
-        if fit_out.beta[1] > cutoff or fit_out.beta[3] > cutoff:
-            self.fitgood = False
-        elif self.fitinfo == "2" or self.fitinfo == "3" or self.fitinfo == "1":
-            self.fitgood = True
-        
-        #fit_out.pprint()
-        self.fitbeta = fit_out.beta
-        
-    def AP_odrfit(self):
-        #not used, odrfit_m is used
-        input_y = list(map(lambda f:f[0], self.border))
-        input_x = list(map(lambda f:f[1], self.border))
-        input_dat = [input_y, input_x]
-        fit_data = odr.Data(input_dat, y=1)
-        fit_model = odr.Model(self.AP_ellipse, implicit=True)
-        
-        fit_odr = odr.ODR(fit_data, fit_model, self.AP_fitinit)
-        fit_out = fit_odr.run()
-        self.fitinfo = str(fit_out.info)
-        temp = fit_out.beta
-        self.fitbeta = [temp[0],temp[1], temp[2], self.area/(np.pi*temp[1]),temp[3]] 
-
-        #cutoff for areas of boulders, throws out any fits that are too big
-        area = np.pi*self.fitbeta[1]*self.fitbeta[3]
-        if area > MA:
-            self.fitgood = False
-        elif self.fitinfo == "2" or self.fitinfo == "3" or self.fitinfo == "1" or self.fitinfo == '4':
-            self.fitgood = True
-        return
+        return flipval 
+  
     def AP_odrfit_m(self):
         #not used, odrfit_m is used
         input_y = list(map(lambda f:f[0], self.mborder))
@@ -1383,17 +1346,6 @@ class shadow(object):
         
         #print beta
         return val
-###Got doubled somehow, this one uses self.area (the area of the shadow) as opposed to marea (mirrored area, the double shadow area)
-##    def AP_ellipse(self, beta, coords):
-##        y = coords[0]
-##        x = coords[1]
-##        yc = beta[0]
-##        xc = beta[2]
-##        ay = beta[1]
-##        ax = self.area/(np.pi*ay)
-##        #alpha is the clockwise angle of rotation
-##        alpha = beta[3]
-##        return (((y-yc)*np.cos(alpha)+(x-xc)*np.sin(alpha))/ay)**2 + (((x-xc)*np.cos(alpha)-(y-yc)*np.sin(alpha))/ax)**2 - 1
 
     def AP_ellipse(self, beta, coords):
         y = coords[0]
@@ -1447,15 +1399,6 @@ def getshads(runfile, num, silenced = True, mode='r'):
             print'Likely broken file'
         return None
     return load
-def GISprep(runfile,num,mod):
-    '''Deprecated, use OutToGIS() instead'''
-    #this takes the target file and makes the necessary  arc documents to plot them
-    #assumes that source image and matching arc documents are available in same folder
-    #mod is tacked onto the name, SEG will match with segmented images for example
-    shutil.copyfile('%s%s%s.PGw'%(PATH,FNM,num),'%s%s%s%s_%s.PGw'%(PATH,runfile,FNM,num,mod))
-    shutil.copyfile('%s%s%s.PNG.aux.xml'%(PATH,FNM,num),'%s%s%s%s_%s.PNG.aux.xml'%(PATH,runfile,FNM,num,mod))
-    ###OVRs are just pyramid data, dont need to copy those
-    ##shutil.copyfile('%s%s%s.PNG.ovr'%(PATH,FNM,num),'%s%s%s%s_%s.PNG.ovr'%(PATH,runfile,FNM,num,mod))
 def bulkCFA(runfile,maxnum,maxd,fitmaxd,root):
     ''' runs the CFA protocol on a bunch of files and gives an average
 '''
@@ -2177,7 +2120,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
             #stdev = ~.28
             #low boundary = .22
             #high boundary = .78
-            if shadlen!=0 and bouldwid_m>1.5:
+            if shadlen!=0 and bouldwid_m>1.5 and bouldwid_m<20:
                 datafile2.write(info)
                 
                 
