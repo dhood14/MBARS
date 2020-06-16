@@ -11,6 +11,8 @@ and numerals at the end, i.e. "root0.PNG" and "root23.PNG"
 '''
 filenames = []
 
+FRAC = 100
+
 #filename += 'ESP_011357_2285_RED300PX'
 
 
@@ -19,9 +21,13 @@ filenames = []
 
 #GOlombek Comparison Images
 #filenames += ['TRA_000828_2495_RED500PX']
-filenames +=['TRA_000828_2495_RED_16bit']
+#filenames +=['TRA_000828_2495_RED_16bit']
 #filenames += ['PSP_001391_2465_RED500PX']
-filenames += ['PSP_001391_2465_RED16bit500PX']
+#filenames += ['PSP_001391_2465_RED16bit500PX']
+
+#McNaughton Comparison
+#filenames+= ['PSP_002387_1985_RED16bit_500PX']
+filenames+=['PSP_002387_1985_RED16bit_Dtop_500PX']
 
 #viking 1 lander setup:
 
@@ -43,11 +49,19 @@ filenames += ['PSP_001391_2465_RED16bit500PX']
 #filenames += ['PSP_007718_2350_RED300px']
 
 #JoesImages
-#filenames += ['PSP_007693_2300_RED500PX']
+#filenames += ['PSP_007693_2300_RED16bit500PX']
 
 #Proposal Test Images
 #filenames += ['PSP_001415_2470_RED500PX']
-filenames+= ['PSP_001415_2470_RED16bit500PX']
+#filenames+= ['PSP_001415_2470_RED16bit500PX']
+#filenames+=['PSP_001741_2395_RED16bit_500PX']
+#filenames+=['PSP_001481_2410_RED16bit_500PX']
+#filenames+=['PSP_001473_2480_RED16bit_500PX']
+#filenames+=['PSP_001430_2470_RED16bit_500PX']
+#filenames+=['PSP_001418_2495_RED16bit_500PX']
+#filenames+=['PSP_001482_2490_RED16bit_500PX']
+#filenames+=['PSP_001484_2455_RED16bit_500PX']
+#filenames+=['PSP_001742_2370_RED16bit']
 
 
 ######SOME CONTROLS###################
@@ -65,7 +79,6 @@ thread_limit = 2
 def core(num,gam,plot,manbound,bound,odr_keycard):
     '''core function of the run file, does gamfun and boulder detect
     '''
-    #seg, good, runfile = MBARS.gamfun(num,gam, plot,manbound)
     seg,good,runfile = MBARS.autobound(num,bound)
     #print 'step 1 done'
     if good:
@@ -77,14 +90,15 @@ def core(num,gam,plot,manbound,bound,odr_keycard):
         print 'Done with image %s'%(num)
     return runfile
 
-def thread_run(filename,plot,startat):
+def thread_run(filename,plot,startat, frac):
 
     MBARS.FNM, MBARS.ID, MBARS.NOMAP,panels = MBARS.RunParams(filename)
 
     MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(MBARS.FNM)
     MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
     #mangam,manbound = MBARS.FindIdealParams(filename,True)
-    bound = MBARS.getimagebound(panels)
+    #set the proportion of the shadow to use here
+    bound = MBARS.getimagebound(panels,frac)
     mangam = 0
     manbound = 0
     t1 = time.clock()
@@ -128,7 +142,7 @@ def thread_run(filename,plot,startat):
     #mangam, manbound = MBARS.FindIdealParams(i)
     
 for i in filenames:
-    thread_run(i,plot,startat)
+    thread_run(i,plot,startat,FRAC)
 
 
 

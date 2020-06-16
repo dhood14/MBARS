@@ -71,132 +71,6 @@ def start():
     current()
     return i,s,r,n,saz, rotang
     
-#Inputs: image = Image to be analyzed (a 2 or 3-d np.array), gam = value for Gamma,
-# png = boolean dictating if the image is a 3-D array (True if 3D), plot = True to plot things, False to not
-#bound = where to cutoff the shadows, expressed as a fraction of gaussian max (.01 will select the point that is .01* max value as the boundary
-#outputs: imagelin and imagemodlin, 1-D arrays of the image data before and after gamma modification,
-# imageseg= np array with shadows marked as 0.
-
-    
-def gamfun(num,gam=.6, plot=False, manualbound = 130,quickrun = False):
-    #print(num)
-    #this section causes some errors to pop up between threads, two can try and make it at the same time...
-    if quickrun:
-        runfile = 'temp//'
-    elif manualbound:
-        runfile = 'gam%s_manbound%s//'%(int(gam*1000),int(manualbound))
-    else:
-        runfile = 'gam%s_bound%s//'%(int(gam*1000),int(boundfrac*1000))
-    if not os.path.exists('%s%s'%(PATH,runfile)):
-        try:
-            os.makedirs('%s%s'%(PATH,runfile))
-        except(WindowsError):
-            #this is in case two threads try and make something at the same time
-            #is it dirty? yes, does it work? also yes.
-            pass
-    try:
-       image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
-    except(ValueError, SyntaxError):
-        return None, False, runfile
-    if isinstance(image[0][0], list):
-         #Black and White PNGs store three (identical) values per pixel, this flattens pngs into a 2-D array
-        imagetemp = np.zeros((len(image),len(image[0])),dtype=np.uint16)
-        for i in range(len(imagetemp)):
-            for j in range(len(imagetemp[0])):
-                imagetemp[i][j]=image[i][j][0]
-        image=imagetemp
-    #sharpening was attempted, it destroyed any boulder shapes, left for now
-    #image = skrank.enhance_contrast(image, skmorph.disk(3))
-##    if NOMAP:
-##        rotang = 90+SAZ
-##            else:
-##        #rotang = NAZ-SAZ
-##        rotang = -sunangle
-        
-    image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
-    image = npma.masked_equal(image, 0)
-
-    ''' rotation seems to cause some stray data to appear at the edge, this is often
-        categorized as shadows because it is very dark but not zero, this code will
-        essentially erode the edges a bit, shifting the mask up, down, left and right
-        and taking the logical OR of the two masks, masking things that are adjacent to
-        the mask in any direction
-        '''
-    shift = np.roll(image.mask,1,1)
-    image.mask = np.logical_or(image.mask, shift)
-    shift = np.roll(image.mask,-1,1)
-    image.mask = np.logical_or(image.mask, shift)
-    shift = np.roll(image.mask,1,0)
-    image.mask = np.logical_or(image.mask, shift) 
-    shift = np.roll(image.mask,-1,0)
-    image.mask = np.logical_or(image.mask, shift)
-    
-    #image.dump('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
-    #rotation incurs some kind of offset to the pixel value, meaning much of the area isnt '0' anymore
-    #recasting as int may solve this problem
-    
-    pixels = len(image)*len(image[0])
-
-    #if the image is just blank, side effect of projected images
-    if not np.any(image.compressed()):
-        return None, False, runfile
-
-    #do the actual gamma correction,
-    
-    top = 0.
-    image = image**float(gam)
-    top = np.max(image)
-    scale = 255./top
-    image = image*scale
-    image = image.astype(int)
-
-    #making sure the boundary is a float
-    bound = float(manualbound)
-    
-    #print ("Shadow value boundary at:%s"%(bound))
-    #doing the indexing in the fastest way always passes the mask, so we are unmasking
-    #filling in the values with an impossible number, then putting it all back in
-    imageseg = npma.copy(image)
-    imageseg = imageseg.astype(float)
-    imageseg = imageseg.filled(-1)
-
-    imageseg[imageseg>bound+1] = bound+1
-    imageseg = npma.masked_equal(imageseg, -1)    
-    imageseg = imageseg.astype(int)
-    imageseg.fill_value = 0
-    
-    imageseg.dump("%s%s%s%s_SEG.npy"%(PATH,runfile,FNM,num))
-    #this is the full figure suite, which struggles when you have a big image
-    if plot:
-        fig,ax = plt.subplots(1,2,sharex = True, sharey = True)
-        ax[0].imshow(image, cmap='binary_r', interpolation='none')
-        ax[1].imshow(imageseg,vmax = bound, vmin = bound-1, interpolation='none')
-##        plt.figure(1)
-##        plt.title('Gamma stretched image')
-##        plt.imshow(imagemod, cmap='binary_r')
-##        plt.figure(2)
-##        plt.title('shadows isolated image')
-##        plt.imshow(imageseg)
-        #plt.figure (3)
-        #plt.imshow(sktrans.rotate(image,-SUNANGLE,resize=True, preserve_range=True), cmap='binary_r')
-
-        plt.show()
-    #This makes sure that images with data but no shadows do not go through the segmentation process
-    if np.min(imageseg)>= bound:
-        good = False
-    else:
-        good=True
-    return(imageseg, good ,runfile)
-
-
-#this method uses a gaussian fit to the data to find the shadow boundary
-#it takes in the linearized image that you want to use and returns the shadow boundary
-def gauss(x,sig,mu):
-    y = (1./(sig*np.sqrt(2.*np.pi)))*np.exp((-1./2.)*(((x-mu)/sig)**2.))
-    return y
-def gauss_unnorm(x,sig,mu):
-    y = np.exp((-1/2)*((x-mu)/sig)**2)
-    return y
 
 def autobound(num,bound):
     ''' An automatic boundary-finder for HiRISE images, relies on input statistics
@@ -254,7 +128,7 @@ def autobound(num,bound):
     
     return(imageseg, good, runfile)
 
-def getimagebound(panels):
+def getimagebound(panels,prop):
     '''TO retrieve the overall image stats and calculate the absolute shadow boundary
 
     assumes a 2-pixel wide (4 total pixels) shadow to the minimum shadow size'''
@@ -309,11 +183,10 @@ def getimagebound(panels):
         #Probably the correct answer for this is a circle inscribed on a square
         #prop = 100*np.pi/4.
         #that was too generous, but 52 was too low, lets try 64
-        prop = 64
+        #prop = 60
         stat = np.percentile(shad_con,prop)
         stats+=[stat]
 
-   
     bound = np.average(stats)
     print ("Selected boundary at %s"%(bound))
 
@@ -366,42 +239,6 @@ def lorentz_kern(dim=21,gam=.77):
     return(kern)
 
 #########This is the measuring side of the code#####################################
-
-def boulderdetect(num,image,runfile):
-    #deprecated, uses threadsafe version now
-    #flag must be dtype long, otherwise it will wrap at high numbers and reset the flag to 1
-    flag = long(1)
-    coords = [0,0]
-    save = open("%s%s%s%s_shadows.shad"%(PATH,runfile, FNM,num), 'wb')
-    im_area = len(image)*(len(image[0]))
-    #flagged image has the boulders marked
-    #print 'Running Watershed %s\n'%(num)
-    fimage = watershedmethod(image)
-    #have to explicitly pass the mask on from the input image
-    fimage = npma.masked_array(fimage)
-    fimage.dump('%s%s%s%s_flagged.npy'%(PATH, runfile,FNM,num))
-    fimage.mask = image.mask
-
-    #close the seg image to open up memory
-    image = None
-    fmax = np.max(fimage)
-    #shadows = []
-    #print 'finding shadows %s \n'%(num)
-    shade=None
-    for i in range(fmax+1):
-        #print 'flag %s image %s\n'%(i,num)
-        pixels = np.argwhere(fimage == i)
-        #must be converted to list for the neighbor-checking function to work
-        pixels = pixels.tolist()
-        if len(pixels) >=minA and len(pixels)<MA:
-            
-            shade = shadow(i, pixels, im_area)
-            
-            shade.run()
-            
-            pickle.dump(shade,save)
-    save.close() 
-    return
 
 def boulderdetect_threadsafe(num,image,runfile,odr_keycard):
     #flag must be dtype long, otherwise it will wrap at high numbers and reset the flag to 1
@@ -1310,6 +1147,7 @@ class shadow(object):
         
         if test <= 0:
             factor = np.cos(self.fitbeta[4])
+            #factor = 1
             self.bouldwid = 2*abs(factor*self.fitbeta[3])
             self.shadlen = abs(factor*self.fitbeta[1])
             self.bouldcent = [self.fitbeta[0],self.fitbeta[2]]
@@ -1317,6 +1155,7 @@ class shadow(object):
             self.measured = True
         if test > 0:
             factor = np.sin(self.fitbeta[4])
+            #factor = 1
             self.bouldwid = 2*abs(factor*self.fitbeta[1])
             self.shadlen = abs(factor*self.fitbeta[3])
             self.bouldcent = [self.fitbeta[0],self.fitbeta[2]]
@@ -1380,6 +1219,13 @@ class shadow(object):
 
             
 ##############Some tools for analysis##########
+def gauss(x,sig,mu):
+    y = (1./(sig*np.sqrt(2.*np.pi)))*np.exp((-1./2.)*(((x-mu)/sig)**2.))
+    return y
+def gauss_unnorm(x,sig,mu):
+    y = np.exp((-1/2)*((x-mu)/sig)**2)
+    return y
+
 def current():
     print 'Current Path is: %s'%(PATH)
     print 'Current Filename is: %s'%(FNM)
@@ -1691,23 +1537,23 @@ def checkbads(runfile,num):
         ax.add_patch(j)
     plt.show()
     return bads
-    
-def exportdata(runfile,num):
-    #this takes a shadow file and converts it to a csv file with relevant data
-    load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num),'rb')
-    attributes = [['flag','bouldwid','bouldcent_y','bouldcent_x','alpha']]
-    while True:
-        try:
-            dat = pickle.load(load)
-        except EOFError:
-            break
-        attributes +=[[dat.flag, dat.bouldwid, dat.bouldcent,dat.fitbeta[3]]]
-    datfile = open('%s%s%s%s_data.csv'%(PATH,runfile, FNM,num),'w')
-    for item in attributes:
-        datfile.write('%s\n'%item)
-    datfile.close()
-    #np.savetxt('%s%s%s_data.csv'%(PATH,FNM,num),attributes, delimiter="'")
-    return attributes
+#marked out on 3/3/2020, may need to be removed    
+##def exportdata(runfile,num):
+##    #this takes a shadow file and converts it to a csv file with relevant data
+##    load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num),'rb')
+##    attributes = [['flag','bouldwid','bouldcent_y','bouldcent_x','alpha']]
+##    while True:
+##        try:
+##            dat = pickle.load(load)
+##        except EOFError:
+##            break
+##        attributes +=[[dat.flag, dat.bouldwid, dat.bouldcent,dat.fitbeta[3]]]
+##    datfile = open('%s%s%s%s_data.csv'%(PATH,runfile, FNM,num),'w')
+##    for item in attributes:
+##        datfile.write('%s\n'%item)
+##    datfile.close()
+##    #np.savetxt('%s%s%s_data.csv'%(PATH,FNM,num),attributes, delimiter="'")
+##    return attributes
 
 def FindIdealParams(filename, oldvals = False):
     '''Code to identify ideal parameters for running images, will assume single set of values for entire image
@@ -2039,9 +1885,9 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
     if not os.path.exists('%sGISFiles//%s'%(PATH,runfile)):
         os.makedirs('%sGISFiles//%s'%(PATH,runfile))
     datafile = open("%sGISFiles//%s%s_All_boulderdata.csv"%(PATH,runfile,FNM),'w')
-    datafile2 = open("%sGISFiles//%s%s_Confident_boulderdata.csv"%(PATH,runfile,FNM),'w')
+    datafile2 = open("%sGISFiles//%s%s_Clean_boulderdata.csv"%(PATH,runfile,FNM),'w')
     #put in the headers, we will start small with the boulders:
-    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen,measured,fitgood,fiterr\n'
+    headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen,measured,fitgood,fiterr,angle\n'
     datafile.write(headers)
     datafile2.write(headers)
     #bring in the original rotation information
@@ -2083,6 +1929,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
                 bouldheight_m = dat.bouldheight_m
                 shadlen = dat.shadlen
                 AR = float(bouldheight_m/bouldwid_m)
+                angle = dat.fitbeta[4]
                 try:
                     fiterr = dat.fiterr
                 except:
@@ -2113,14 +1960,14 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
             xmap = constants[0]*xpos_rot + constants[2]*ypos_rot + constants[4]
             ymap = constants[1]*xpos_rot + constants[3]*ypos_rot + constants[5]
             #write it all down
-            info = '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m,shadlen,measured,fitgood,fiterr)
+            info = '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n'%(i,flag,xmap,ymap,bouldwid_m,bouldheight_m,shadlen,measured,fitgood,fiterr,angle)
             datafile.write(info)
             #putting the aspect ratio filter in here, going to use numbers based on Demidov and Basilevsky 2014
             #average = ~.5
             #stdev = ~.28
             #low boundary = .22
             #high boundary = .78
-            if shadlen!=0 and bouldwid_m>1.5 and bouldwid_m<20:
+            if shadlen!=0 and bouldwid_m<20 and fitgood == 1:
                 datafile2.write(info)
                 
                 
@@ -2159,14 +2006,6 @@ def plotborder(array):
     xdat = array[range(l),[1]*l]
     plt.plot(xdat, ydat, "o")
     return
-#Range of Floats List, tool to make lists of floats not ints
-def ROFL (start, stop, step):
-    nums = []
-    i = float(start)
-    while i < stop:
-        nums+=[i]
-        i+=step
-    return nums
 
 
 def getangles(ID, path = REFPATH):
