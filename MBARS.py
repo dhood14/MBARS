@@ -6,14 +6,14 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import scipy.misc as spm
 from scipy import odr
-import winsound
 from scipy.optimize import curve_fit
 import time
-import cPickle as pickle
+#use Cpickle if available
+#import cPickle as pickle
+import pickle
 import os
-import shutil
 import matplotlib.patches as patches
-#import pysal
+
 import numpy.ma as npma
 import skimage.transform as sktrans
 from math import *
@@ -29,14 +29,19 @@ import scipy.signal as spsig
 import imageio
 import threading
 
+try:
+    raw_input = input
+except(NameError):
+    pass
+
 #This is the MBARS library, it contains all the functions needed to run MBARS
 
 #Global Variables, adjust as needed:
 #REFPATH is where important reference files are stored, the key one is
 # the HiRISE info file (RDRCUMINDEX.TAB) needs to be in the REFPATH folder
-REFPATH = 'C://Users//dhood7//Desktop//MBARS//RefData//'
+REFPATH = 'D://MBARS//RefData//'
 #BASEPATH is where MBARS will look for the provided filename
-BASEPATH = 'C://Users//dhood7//Desktop//MBARS//Images//'
+BASEPATH = 'D://MBARS//Images//'
 PATH = None
 FNM = None
 
@@ -93,6 +98,7 @@ def autobound(num,bound):
         return None, False, runfile
     image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
     image = npma.masked_equal(image, 0)
+    
 
     ''' rotation seems to cause some stray data to appear at the edge, this is often
         categorized as shadows because it is very dark but not zero, this code will
@@ -134,7 +140,7 @@ def getimagebound(panels,prop):
     assumes a 2-pixel wide (4 total pixels) shadow to the minimum shadow size'''
 
     bins = np.linspace(0,1023,1024)
-    bins = map(int,bins)
+    bins = bins.astype(int)
     hist = None
     cum_hist = None
     #panels = 400
@@ -242,7 +248,12 @@ def lorentz_kern(dim=21,gam=.77):
 
 def boulderdetect_threadsafe(num,image,runfile,odr_keycard):
     #flag must be dtype long, otherwise it will wrap at high numbers and reset the flag to 1
-    flag = long(1)
+    #longs do not exist in python 3, leaving some compatibility in
+    try:
+        flag = long(1)
+    #NameError should only trip when Python 3 is running, in which case all ints are longs in effect
+    except(NameError):
+        flag = 1
     coords = [0,0]
     save = open("%s%s%s%s_shadows.shad"%(PATH,runfile, FNM,num), 'wb')
     im_area = len(image)*(len(image[0]))
@@ -288,7 +299,8 @@ def watershedmethod(image):
     temp = temp*(-1)+np.max(image)+1
     #find the peaks in the image, return the points as a nx2 array
     #min_distance is a super important argument,changes the minimum distance allowed betwen maxima
-    points = skfeat.peak_local_max(temp,min_distance=mindist, indices=True)
+    #added absolute threshold so that the background doesnt get selected...
+    points = skfeat.peak_local_max(temp,min_distance=mindist,threshold_abs = 2, indices=True)
 
     #put in a guard against images with no shadows
     threshold = len(image.compressed())/2
@@ -334,7 +346,7 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
     runfile - current runfile for shad file finding purposes
     overlap - allowed overlap between boulders, expressed in fraction of boulder area
     '''
-    shadow_file = getshads(runfile, num,mode='r')
+    shadow_file = getshads(runfile, num,mode='rb')
     if shadow_file == None:
         return
     parameters = []
@@ -401,7 +413,7 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
             break
     #close and re-open for re-writing
     shadow_file.close()
-    shadow_file = getshads(runfile,num,mode='w')
+    shadow_file = getshads(runfile,num,mode='wb')
 
     
     problem_flags = [a[0] for a in parameters if a[5]!=-1]
@@ -507,7 +519,8 @@ def overlapcheck_shadbased(num,runfile,odr_keycard):
     Another take on the overlap merging function. This one is NOT based on the interpreted boulders, rather the adjacency of shadows
     if shadows touch each other, the function considers whether combining it with other shadows makes it a "better" shadow
     '''
-    shadow_file = getshads(runfile, num,mode='r')
+    shadow_file = getshads(runfile, num,mode='rb')
+    #print(shadow_file)
     if shadow_file == None:
         return
     parameters = []
@@ -600,7 +613,7 @@ def overlapcheck_shadbased(num,runfile,odr_keycard):
             break
     #close and re-open for re-writing
     shadow_file.close()
-    shadow_file = getshads(runfile,num,mode='w')
+    shadow_file = getshads(runfile,num,mode='wb')
 
     prob_flags = [a for clust in clusters for a in clust]
     problem_boulders = []
@@ -1227,22 +1240,22 @@ def gauss_unnorm(x,sig,mu):
     return y
 
 def current():
-    print 'Current Path is: %s'%(PATH)
-    print 'Current Filename is: %s'%(FNM)
-    print 'current Product ID is: %s'%(ID)
+    print ('Current Path is: %s'%(PATH))
+    print ('Current Filename is: %s'%(FNM))
+    print ('current Product ID is: %s'%(ID))
     return
-def getshads(runfile, num, silenced = True, mode='r'):
+def getshads(runfile, num, silenced = True, mode='rb'):
     #open and prep a shadow file, returns open file object and endpoint
     #current()
     try:
         load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num), mode)
     except IOError:
         if not silenced:
-            print "No shadow file exists"
+            print ("No shadow file exists")
         return None
     except:
         if not silenced:
-            print'Likely broken file'
+            print('Likely broken file')
         return None
     return load
 def bulkCFA(runfile,maxnum,maxd,fitmaxd,root):
@@ -1266,7 +1279,7 @@ def bulkCFA(runfile,maxnum,maxd,fitmaxd,root):
 
             allCFAs+=[dat]
         if allCFAs == []:
-            print "No CDFs Present"
+            print ("No CDFs Present")
             new = 'y'
     if new == 'y':
         for i in range(maxnum):
@@ -1469,7 +1482,7 @@ def plotCFArefs(xmax):
         y = np.concatenate((y20,y30,y40,y50))
         plt.plot(x,y,'m*',alpha=.2,label = '20,30,40,50% RA',zorder=1)
     if option == 2 or option == 5:
-        print 'cannot do until data is provided'
+        print ('cannot do until data is provided')
         #dat = np.loadtxt('%sGolomCFADat_TRA_000828_2495.csv'%(REFPATH),delimiter=',')
         #plt.plot(dat[0],dat[1],'k*',alpha=.7)
     if option == 3 or option == 5:
@@ -1574,31 +1587,31 @@ def FindIdealParams(filename, oldvals = False):
         oldgam = float(oldgam)
         oldbound = float(oldbound)
         if oldvals:
-            print 'Using old values\n'
+            print ('Using old values\n')
             return oldgam,oldbound
         prompt = 'Use old params, gam = %s, bound = %s y/n?\n'%(oldgam,oldbound)
         answer = raw_input(prompt)
         
         if answer == 'y':
-            print 'Using old values\n'
+            print ('Using old values\n')
             return oldgam,oldbound
         else:
             if answer !='n':
-                print 'Lets assume you meant \'n\''
-            print 'OK, lets make new values\n'
+                print ('Lets assume you meant \'n\'')
+            print ('OK, lets make new values\n')
        
     while True:
         imnum = np.random.random_integers(0,num-1)
         image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,imnum))
-        print 'Is the following sub-image representative of the entire image?\n'
+        print ('Is the following sub-image representative of the entire image?\n')
         plt.imshow(image, cmap='binary_r')
         plt.show()
         answer = raw_input('y/n\n')
         if answer == 'y':
-            print 'image %s selected, lets get params'%(imnum)
+            print ('image %s selected, lets get params'%(imnum))
             break
         else:
-            print 'trying new image...\n'
+            print ('trying new image...\n')
 
 
     userinterp = True
@@ -1619,7 +1632,7 @@ def FindIdealParams(filename, oldvals = False):
         imagemod = sktrans.rotate(imagemod,ROTANG,resize=True,preserve_range=True)
         image = sktrans.rotate(image,ROTANG,resize=True,preserve_range=True)
         while True:
-            print "Let set an initial boundary"
+            print ("Let set an initial boundary")
             imageseg = npma.copy(imagemod)
             imageseg = imageseg.astype(float)
             imageseg = imageseg.filled(-1)
@@ -1646,7 +1659,7 @@ def FindIdealParams(filename, oldvals = False):
             try:
                 size = int(size)
             except(ValueError):
-                print 'that was not an int'
+                print ('that was not an int')
                 size = 5
             
             if answer == 'I' or answer == 'i':
@@ -1654,7 +1667,7 @@ def FindIdealParams(filename, oldvals = False):
             else:
                 bound-= size
         while True:
-            print "lets refine the boundary"
+            print ("lets refine the boundary")
             imageseg = npma.copy(imagemod)
             imageseg = imageseg.astype(float)
             imageseg = imageseg.filled(-1)
@@ -1695,7 +1708,7 @@ def FindIdealParams(filename, oldvals = False):
             try:
                 size = int(size)
             except(ValueError):
-                print 'that was not an int'
+                print ('that was not an int')
                 size = 5
             
             if answer == 'I' or answer == 'i':
@@ -1726,11 +1739,11 @@ def ExamineImage(runfile,num, showblanks,filt = True):
             patches2 +=dat.patchplot(filt)
         #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
         image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
-        segimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num))
+        segimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num),allow_pickle=True)
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
         #segimage = sktrans.rotate(segimage,ROTANG, resize=True, preserve_range=True)
         image = npma.masked_equal(image, 0)
-        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num))
+        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num),allow_pickle=True)
         
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
@@ -1752,7 +1765,7 @@ def ExamineImage(runfile,num, showblanks,filt = True):
         image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
         image = npma.masked_equal(image, 0)
-        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num))
+        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num),allow_pickle=True)
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
         ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
@@ -1825,7 +1838,7 @@ def ManualMerge(runfile,num,flags):
     '''Code to manually merge two boulders, only to be used in exception circumstances
         runfile and num specify the image, boulders listed in flags will be merged into one with lowest flag value.
         '''
-    shads = getshads(runfile,num,mode = 'r')
+    shads = getshads(runfile,num,mode = 'rb')
     boulds=[]
     mergeboulds = []
     while True:
@@ -1837,9 +1850,9 @@ def ManualMerge(runfile,num,flags):
             mergeboulds += [dat]
         else:
             boulds+=[dat]
-    print len(mergeboulds)
+    print (len(mergeboulds))
     shads.close()
-    shads = getshads(runfile,num,mode='w')
+    shads = getshads(runfile,num,mode='wb')
     for obj in boulds:
         pickle.dump(obj,shads)
     if len(mergeboulds) == len(flags):
@@ -1855,11 +1868,11 @@ def ManualMerge(runfile,num,flags):
         newbould.run_post()
         pickle.dump(newbould,shads)
         shads.close
-        print 'succesfully merged input boulders with flags %s'%(flags)
+        print ('succesfully merged input boulders with flags %s'%(flags))
         return
 
     else:
-        print'Did not find %s boulders, aborting merge'%(len(flags))
+        print('Did not find %s boulders, aborting merge'%(len(flags)))
         for obj in mergeboulds:
             pickle.dump(obj,shads)
         shads.close()
@@ -1868,7 +1881,7 @@ def ManualMerge(runfile,num,flags):
     
     
 
-def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
+def OutToGIS(runfile,writefile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
     '''this code will take an entire run and export the boulder data to a GIS-interpretable format, assume pngs for the moment'''
     ''' A key part of this is interpreting the PGW files, which follow this convention:
         6 values on 6 lines:
@@ -1882,10 +1895,10 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
         xmap = Ax + By +C
         ymap = Dx + Ey +F
     '''
-    if not os.path.exists('%sGISFiles//%s'%(PATH,runfile)):
-        os.makedirs('%sGISFiles//%s'%(PATH,runfile))
-    datafile = open("%sGISFiles//%s%s_All_boulderdata.csv"%(PATH,runfile,FNM),'w')
-    datafile2 = open("%sGISFiles//%s%s_Clean_boulderdata.csv"%(PATH,runfile,FNM),'w')
+    if not os.path.exists('%sGISFiles//%s'%(PATH,writefile)):
+        os.makedirs('%sGISFiles//%s'%(PATH,writefile))
+    datafile = open("%sGISFiles//%s%s_All_boulderdata.csv"%(PATH,writefile,FNM),'w')
+    datafile2 = open("%sGISFiles//%s%s_Clean_boulderdata.csv"%(PATH,writefile,FNM),'w')
     #put in the headers, we will start small with the boulders:
     headers = 'image,flag,xloc,yloc,bouldwid_m,bouldheight_m,shadlen,measured,fitgood,fiterr,angle\n'
     datafile.write(headers)
@@ -1896,7 +1909,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
         #bring in the image each time, wouldnt have to do this if they were all identical
         #but that cant be gauranteed
         try:
-            seg = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,i))
+            seg = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,i),allow_pickle = True)
         except(IOError):
             continue
         shads = getshads(runfile,i)
@@ -1944,7 +1957,7 @@ def OutToGIS(runfile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
                 xpos = dat.bouldcent[1]
                 ypos = dat.bouldcent[0]
             except:
-                print "failed to retrieve parameters"
+                print ("failed to retrieve parameters")
                 continue
                 #change xpos and ypos to origin on the image center
             xpos_c = xpos-lxcent
@@ -2022,7 +2035,7 @@ def getangles(ID, path = REFPATH):
         try:
             dat = line
         except EOFError:
-            print 'No such HiRISE image, check product ID or update CUMINDEX file'
+            print ('No such HiRISE image, check product ID or update CUMINDEX file')
             return None, None, None
         dat = dat.split(',')
         pid = dat[5]
@@ -2063,7 +2076,7 @@ def getangles(ID, path = REFPATH):
         elif projection == 'POLAR STEREOGRAPHIC':
             rotang = -glong+sunangle
         else:
-            print 'Projection listed as %s, I am error'%(projection)
+            print ('Projection listed as %s, I am error'%(projection))
             return (None)
 
     ''' Inangle is returned as measured from azimuth, sunangle as clockwise from North'''
@@ -2073,7 +2086,7 @@ def getangles(ID, path = REFPATH):
     for line in info:
         try: dat=line
         except EOFError:
-            print 'No such HiRISE image, check product ID or update CUMINDEX file'
+            print ('No such HiRISE image, check product ID or update CUMINDEX file')
             return None, None, None
         dat = dat.split(',')
         if ID == dat[11]:
@@ -2198,14 +2211,15 @@ Panels
 '''
     parampath = '%s%s//runparams.txt'%(BASEPATH,filename)
     if not os.path.isdir('%s%s'%(BASEPATH,filename)):
-        print 'no such directory\n'
+        print ('no such directory\n')
         return None,None,None,None
     if os.path.isfile(parampath):
-        print 'Running Parameters found\n'
+        print ('Running Parameters found\n')
         #get these parameters
-        paramfile = open(parampath,'rb')
+        paramfile = open(parampath,'r')
         info = paramfile.readline()
         info = info.rstrip()
+        #print(info)
         root,mbarsid,mbarsnomap,panels = info.split(',')
 ##        root = paramfile.readline()
 ##        root = root.rstrip
@@ -2225,9 +2239,9 @@ Panels
 
         
     else:
-        print "no parameters found, making new file\n"
+        print ("no parameters found, making new file\n")
         
-        params = open(parampath,'wb')
+        params = open(parampath,'w')
         q1 = 'enter MBARS ID\n'
         mbarsid = raw_input(q1)
         
@@ -2242,12 +2256,18 @@ Panels
                 mbarsnomap = True
                 break
             else:
-                print 'y/n \n'
+                print ('y/n \n')
         #retrieve number of panels
         files = os.listdir('%s%s'%(BASEPATH,filename))
         files = [s for s in files if '.PNG' in s]
         files = [s.replace(filename,'') for s in files]
+        #print(files)
         files = [filter(lambda s: s in '0123456789',j) for j in files]
+        #These had to be added for python 3 compaitbility with changes to filter()
+        #Should be python 2 stable, but untested
+        files = [list(j) for j in files]
+        files = [''.join(j) for j in files]
+        #print(files)
         files = [int(s) for s in files]
         panels = np.max(files) +1
         print('%s panels found'%panels)
