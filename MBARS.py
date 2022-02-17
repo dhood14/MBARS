@@ -152,21 +152,16 @@ def getimagebound(panels,prop):
         n[0] = 0
         if i==0:
             hist = n
-            #cum_hist = cum_n
         else:
             hist+=n
-        #print hist
-            #cum_hist+=cum_n
+
     #we have the histogram for the whole image now.
-    #kill the zeros
-    #hist[0] = 0
+
     mode = np.argmax(hist)
-    #print mode
+
     #make and normalize the cumulative histogram
     cum_hist = np.cumsum(hist)
-    #print hist
-    #plt.plot(hist)
-    #plt.show()
+
     ncum_hist = cum_hist/float(max(cum_hist))
     #this is now a map to the actual image distribution
     runs = 100
@@ -180,24 +175,17 @@ def getimagebound(panels,prop):
         #.77 for the lorentzian taken from
         #Kirk et al 2008, 10.1029/2007JE003000
         img_con = convolve_lorentzPSF(img,mode,.77)
-        #plt.imshow(img_con)
-        #plt.show()
-        #shadow size comes in HERE, must be same as below
+
+        #shadow size comes in HERE, must be same as in Image Maker function
         shad_con = img_con[25:35,25:35]
-        #for a 5x5 shadow, only certain percentiles are meaningful
-        #100 for max, 84, 52 are next cutoffs
-        #Probably the correct answer for this is a circle inscribed on a square
-        #prop = 100*np.pi/4.
-        #that was too generous, but 52 was too low, lets try 64
-        #prop = 60
+
         stat = np.percentile(shad_con,prop)
         stats+=[stat]
 
     bound = np.average(stats)
     print ("Selected boundary at %s"%(bound))
-
-    #return bound,ncum_hist,hist
     return bound
+
 
 def ImageMaker(mapping_hist,mapping_bins,dimx=50,dimy=50):
     ''' returns a value from the HiRISE image population, meant to replicate what I see in MBARS'''
@@ -265,17 +253,20 @@ def boulderdetect_threadsafe(num,image,runfile,odr_keycard):
     fimage.dump('%s%s%s%s_flagged.npy'%(PATH, runfile,FNM,num))
     fimage.mask = image.mask
     fmax = np.max(fimage)
+    
     #clear the seg image to save memory
     image = None
     shade=None
+    
     for i in range(fmax+1):
-        
+        #find all the parts of the image with a shared flag ID, these are theoretically part of a single shadow area
         pixels = np.argwhere(fimage == i)
         #must be converted to list for the neighbor-checking function to work
         pixels = pixels.tolist()
         
+        #A shdaow image will only be made if the shadow is of an appropriate size, not too big or too small
         if len(pixels)<MA and len(pixels)>minA:
-            
+            #Create a shadow object initialized on the list of pixels
             shade = shadow(i, pixels, im_area)
             
             #broken into 3 steps to narrow the thread-unsafe part into one function
@@ -339,6 +330,8 @@ def watershedmethod(image):
     boulds = skmorph.watershed(image.filled(np.max(image)+1), view.filled(0),mask=~view.mask)
 
     return boulds
+
+#Not curently used, consdier removing###
 def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
     '''
     Code to get rid of double-counts in returned boulders, inputs:
@@ -514,6 +507,7 @@ def overlapcheck_threadsafe_DBSCAN(num,runfile,odr_keycard,overlap=.1):
     shadow_file.close()
     return
 
+##This one is actually Used##
 def overlapcheck_shadbased(num,runfile,odr_keycard):
     '''
     Another take on the overlap merging function. This one is NOT based on the interpreted boulders, rather the adjacency of shadows
@@ -724,6 +718,7 @@ def exclusive_shadowmerge(boulds,mincon,shadowfile,odr_keycard):
         for rock in boulds:
             pickle.dump(rock[0],shadowfile)
 
+#Used in the overlap check_Shadbased
 def kmeans_shadowmerge(boulds,shadowfile,odr_keycard,avg_fiterr):
     #boudlds is a list of shadow objects, shadowfile is the targeted shadow file, should be in "write" mode
     #odr-keycard is the thread lock object to prevent multiple access to ODR, maxboulds is the highest k-means will go
@@ -801,51 +796,7 @@ def kmeans_shadowmerge(boulds,shadowfile,odr_keycard,avg_fiterr):
             pickle.dump(i,shadowfile)
     return()
             
-                    
-            
-                         
-def touch(array,pos,wid,indflag,indpos,indwid,ind, plus=False,minus=False):
-    '''Corrolary to the above overlap check function '''
-    #no longer in use
-    
-    rad = wid/2.
-    neighborflags = []
-    #check the neighbors
-    try:
-        if (array[ind+1][indpos]-(array[ind+1][indwid])/2.) < (pos+rad) and plus:
-            neighborflags+=[array[ind+1][indflag]]
-            try:
-                neighborflags+=touch(array,pos,wid,indflag,indpos,indwid,ind+1,True,False)
-            except(RuntimeError):
-                pass
-    except(IndexError):
-        pass
-    try:
-        if (array[ind-1][indpos]+(array[ind-1][indwid]/2.)) > (pos-rad) and minus:
-            neighborflags+=[array[ind-1][indflag]]
-            try:
-                neighborflags+=touch(array,pos,wid,indflag,indpos,indwid,ind-1,False,True)
-            except(RuntimeError):
-                pass
-    except(IndexError):
-        pass
-    return neighborflags
-
-def webfinder(array,web):
-    '''Corrolary to the overlap check function '''
-    #no longer in use
-    oldweb = web
-    for i in web:
-        for j in array:
-            if i in j:
-                for k in j:
-                    if k not in web:
-                        web+=[k]
-    if oldweb != web:
-        web = webfinder(array,web)
-    else:
-        return web
-    
+#called in an unused dunction, consider removing
 def checkpos(shadow1,shadow2):
     '''expects two shadow objects , checks how much they overlap
     returns a fraction of the area of the smaller boulder overlapped by the larger
@@ -892,7 +843,7 @@ def checkpos(shadow1,shadow2):
         area = area/(np.pi*rb**2)
         return area
     
-
+######Shadow Object Definition###########
 class shadow(object):
 
     def __init__(self, flag, pixels, im_area):
@@ -1027,9 +978,10 @@ class shadow(object):
         xs = [i[1] for i in self.pixels]
         ys = [i[0] for i in self.pixels]
         if min(xs) == max(xs) or min(ys) == max(ys):
-            #this is a linear shadows, it will bomb the ODR fitting
+            #this is a linear shadow, it will bomb the ODR fitting
             return
         if len(self.pixels) <=minA:
+            #technicaly should have been filtered out earlier, but better safe than sorry
             return
         for i in self.pixels:
             top=False
@@ -1087,27 +1039,6 @@ class shadow(object):
         self.mborder+=temp
         
         return flipval 
-  
-    def AP_odrfit_m(self):
-        #not used, odrfit_m is used
-        input_y = list(map(lambda f:f[0], self.mborder))
-        input_x = list(map(lambda f:f[1], self.mborder))
-        input_dat = [input_y, input_x]
-        fit_data = odr.Data(input_dat, y=1)
-        fit_model = odr.Model(self.AP_ellipse, implicit=True)
-        fit_odr = odr.ODR(fit_data, fit_model, self.AP_fitinit)
-        fit_out = fit_odr.run()
-        self.fitinfo = str(fit_out.info)
-        temp = fit_out.beta
-        self.fitbeta = [temp[0],temp[1], temp[2], self.marea/(np.pi*temp[1]),temp[3]] 
-
-        #cutoff for areas of boulders, throws out any fits that are too big
-        area = self.marea
-        if area > MA or self.fitbeta[1] > MD or self.fitbeta[3] > MD:
-            self.fitgood = False
-        elif self.fitinfo == "2" or self.fitinfo == "3" or self.fitinfo == "1" or self.fitinfo == '4':
-            self.fitgood = True
-        return
 
     def odrfit_m(self):
         input_y = list(map(lambda f:f[0], self.mborder))
@@ -1198,17 +1129,6 @@ class shadow(object):
         
         #print beta
         return val
-
-    def AP_ellipse(self, beta, coords):
-        y = coords[0]
-        x = coords[1]
-        yc = beta[0]
-        xc = beta[2]
-        ay = beta[1]
-        ax = self.marea/(np.pi*ay)
-        #alpha is the clockwise angle of rotation
-        alpha = beta[3]
-        return (((y-yc)*np.cos(alpha)+(x-xc)*np.sin(alpha))/ay)**2 + (((x-xc)*np.cos(alpha)-(y-yc)*np.sin(alpha))/ax)**2 - 1
 
     def patchplot(self,filt):
         #this will be the new ellipse plotting function that uses the matplotlib patches function
@@ -1550,176 +1470,7 @@ def checkbads(runfile,num):
         ax.add_patch(j)
     plt.show()
     return bads
-#marked out on 3/3/2020, may need to be removed    
-##def exportdata(runfile,num):
-##    #this takes a shadow file and converts it to a csv file with relevant data
-##    load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num),'rb')
-##    attributes = [['flag','bouldwid','bouldcent_y','bouldcent_x','alpha']]
-##    while True:
-##        try:
-##            dat = pickle.load(load)
-##        except EOFError:
-##            break
-##        attributes +=[[dat.flag, dat.bouldwid, dat.bouldcent,dat.fitbeta[3]]]
-##    datfile = open('%s%s%s%s_data.csv'%(PATH,runfile, FNM,num),'w')
-##    for item in attributes:
-##        datfile.write('%s\n'%item)
-##    datfile.close()
-##    #np.savetxt('%s%s%s_data.csv'%(PATH,FNM,num),attributes, delimiter="'")
-##    return attributes
 
-def FindIdealParams(filename, oldvals = False):
-    '''Code to identify ideal parameters for running images, will assume single set of values for entire image
-    returns gam,bound
-    '''
-    global ID,FNM,PATH,NOMAP,SAZ,NAZ,INANGLE,SUNANGLE,RESOLUTION,ROTANG
-    root, ID, NOMAP, num = RunParams(filename)
-    PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(filename)
-    FNM = filename
-    
-    #first see if it has been run before and offer to use those:
-    if os.path.isfile('%slastrun.txt'%(PATH)):
-        #temporary while testing something else
-        lastrun = open('%slastrun.txt'%(PATH))
-        data = lastrun.readline()
-        data = data.rstrip()
-        oldgam,oldbound = data.split(',')
-        oldgam = float(oldgam)
-        oldbound = float(oldbound)
-        if oldvals:
-            print ('Using old values\n')
-            return oldgam,oldbound
-        prompt = 'Use old params, gam = %s, bound = %s y/n?\n'%(oldgam,oldbound)
-        answer = raw_input(prompt)
-        
-        if answer == 'y':
-            print ('Using old values\n')
-            return oldgam,oldbound
-        else:
-            if answer !='n':
-                print ('Lets assume you meant \'n\'')
-            print ('OK, lets make new values\n')
-       
-    while True:
-        imnum = np.random.random_integers(0,num-1)
-        image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,imnum))
-        print ('Is the following sub-image representative of the entire image?\n')
-        plt.imshow(image, cmap='binary_r')
-        plt.show()
-        answer = raw_input('y/n\n')
-        if answer == 'y':
-            print ('image %s selected, lets get params'%(imnum))
-            break
-        else:
-            print ('trying new image...\n')
-
-
-    userinterp = True
-    while userinterp:
-        
-        INANGLE, SUNANGLE,RESOLUTION,NAZ,SAZ,ROTANG = start()
-        current()
-        gam = .6 
-        image = npma.masked_equal(image, 0)
-        imagemod = np.zeros_like(image, dtype=np.uint16)
-        top = 0.
-        imagemod = image**float(gam)
-        top = np.max(imagemod)
-        scale = 255./top
-        imagemod = imagemod*scale
-        imagemod = imagemod.astype(int)
-        bound = int(np.average(imagemod.compressed()))
-        imagemod = sktrans.rotate(imagemod,ROTANG,resize=True,preserve_range=True)
-        image = sktrans.rotate(image,ROTANG,resize=True,preserve_range=True)
-        while True:
-            print ("Let set an initial boundary")
-            imageseg = npma.copy(imagemod)
-            imageseg = imageseg.astype(float)
-            imageseg = imageseg.filled(-1)
-            imageseg[imageseg>bound] = bound+1
-            imageseg = npma.masked_equal(imageseg, -1)    
-            imageseg = imageseg.astype(int)
-            imageseg.fill_value = 0
-            print ('Boundary at %s\n'%(bound))
-           
-            print ('(I)ncrease or (D)ecrease the boundary? or is it (C)orrect?\n')
-            
-            fig,ax = plt.subplots(1,2,sharex = True,sharey = True)
-            ax[0].imshow(image,cmap = 'binary_r')
-            ax[1].imshow(image,cmap = 'binary_r',alpha = .5, zorder = 1)
-            ax[1].imshow(imageseg,vmin = bound,vmax = (bound+1), zorder = 0)
-            plt.show()
-            
-            prompt = 'I,D,C?\n'
-            answer = raw_input(prompt)
-            if answer == 'C' or answer == 'c':
-                break
-            prompt = 'Move by how much? (integer please)\n'
-            size = raw_input(prompt)
-            try:
-                size = int(size)
-            except(ValueError):
-                print ('that was not an int')
-                size = 5
-            
-            if answer == 'I' or answer == 'i':
-                bound+=size
-            else:
-                bound-= size
-        while True:
-            print ("lets refine the boundary")
-            imageseg = npma.copy(imagemod)
-            imageseg = imageseg.astype(float)
-            imageseg = imageseg.filled(-1)
-            imageseg[imageseg>bound] = bound+1
-            imageseg = npma.masked_equal(imageseg, -1)    
-            imageseg = imageseg.astype(int)
-            imageseg.fill_value = 0
-            print ('Boundary at %s\n'%(bound))
-           
-            seg, good, runfile = gamfun(imnum,gam,False,bound,quickrun=True)
-            bads = boulderdetect_threadsafe(imnum,seg,runfile,threading.Lock())
-            overlapcheck_threadsafe_DBSCAN(imnum,runfile,threading.Lock(),overlap=.0001)
-            print ('(I)ncrease or (D)ecrease the boundary? or is it (C)orrect?\n')
-            load = getshads(runfile,imnum)
-            patches = []
-            while True:
-                try:
-                    dat = pickle.load(load)
-                except EOFError:
-                    break
-                patches += dat.patchplot(True)
-            fig,ax = plt.subplots(1,3,sharex = True,sharey = True)
-            ax[0].imshow(image,cmap = 'binary_r')
-            ax[1].imshow(image,cmap = 'binary_r',alpha = .5, zorder = 1)
-            ax[1].imshow(imageseg,vmin = bound,vmax = (bound+1), zorder = 0)
-            ax[2].imshow(image,cmap='binary_r')
-            for j in patches:
-                ax[2].add_patch(j)
-            plt.show()
-            prompt = 'I,D,C?\n'
-            answer = raw_input(prompt)
-            if answer == 'C' or answer == 'c':
-                save = open('%slastrun.txt'%(PATH),'w')
-                save.write('%s,%s'%(gam,bound))
-                return gam,bound
-            prompt = 'Move by how much? (integer please)\n'
-            size = raw_input(prompt)
-            try:
-                size = int(size)
-            except(ValueError):
-                print ('that was not an int')
-                size = 5
-            
-            if answer == 'I' or answer == 'i':
-                bound+=size
-            else:
-                bound-= size
-            
-
-
-
-    return gam,bound
     
     
 def ExamineImage(runfile,num, showblanks,filt = True):
@@ -1880,7 +1631,7 @@ def ManualMerge(runfile,num,flags):
         
     
     
-
+##Very important##
 def OutToGIS(runfile,writefile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
     '''this code will take an entire run and export the boulder data to a GIS-interpretable format, assume pngs for the moment'''
     ''' A key part of this is interpreting the PGW files, which follow this convention:
@@ -2020,7 +1771,7 @@ def plotborder(array):
     plt.plot(xdat, ydat, "o")
     return
 
-
+##Also Very important
 def getangles(ID, path = REFPATH):
     '''
     input is the product ID of the HiRISE image, returns key observation values:
@@ -2098,31 +1849,7 @@ def getangles(ID, path = REFPATH):
         
     return inangle, sunangle, res, naz, saz, rotang
 
-def decon_PSF(image, iterations = 10, binned = False):
-    '''my kernel for the HiRISE Point Spread Function, used to deconvolve the image
-        from McEwen 2007, the FWHM of the PSF is 2 if the image is unbinned, or 1 if binned at 2x2
-        as such, we will allow for both options
-        '''
-    #THIS DOES NOT WORK< NOT SURE WHY
-    if binned:
-        sigma = 1./(2*np.sqrt(2*np.log(2)))
-
-    else:
-        sigma = 2./(2*np.sqrt(2*np.log(2)))
-    #PSF = np.zeros((11,11))
-    k1d = np.linspace(0,10,11)
-    k1d = gauss(k1d,sigma,5)
-    k2d = np.outer(k1d,k1d)
-    k2d = k2d/k2d.sum()
-    
-    image = image.astype(float)
-    #trying out manual iterating since the internal iterations arent working
-   
-    #image_decon = skrestore.richardson_lucy(image, k2d,1,False)
-    image_decon = skrestore.wiener(image, k2d, 1.0, None, True, False)
-    
-    return image_decon
-        
+  #Very important do not touch      
 def groundaz(glat, glon, slat, slon):
     """
     Translated directly from the ISIS GroundAzimuth C function

@@ -13,6 +13,9 @@ filenames = []
 
 FRACS = [30,40,50,60,70]
 
+#Should rework this to work with input files that point it at files to run.
+#This will clean things up a lot I think.
+
 #filename += 'ESP_011357_2285_RED300PX'
 
 
@@ -100,7 +103,6 @@ def thread_run(filename,plot,startat, frac):
 
     MBARS.PATH = 'D://MBARS//Images//%s//'%(MBARS.FNM)
     MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
-    #mangam,manbound = MBARS.FindIdealParams(filename,True)
     #set the proportion of the shadow to use here
     bound = MBARS.getimagebound(panels,frac)
     mangam = 0
