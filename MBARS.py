@@ -18,6 +18,7 @@ import numpy.ma as npma
 import skimage.transform as sktrans
 from math import *
 import skimage.feature as skfeat
+import skimage.segmentation as skseg
 import skimage.morphology as skmorph
 import skimage.filters.rank as skrank
 import skimage.restoration as skrestore
@@ -39,9 +40,9 @@ except(NameError):
 #Global Variables, adjust as needed:
 #REFPATH is where important reference files are stored, the key one is
 # the HiRISE info file (RDRCUMINDEX.TAB) needs to be in the REFPATH folder
-REFPATH = 'D://MBARS//RefData//'
+REFPATH = 'C://Users//Don_Hood//Documents//MBARS//RefData//'
 #BASEPATH is where MBARS will look for the provided filename
-BASEPATH = 'D://MBARS//Images//'
+BASEPATH = 'C://Users//Don_Hood//Documents//MBARS//Images//'
 PATH = None
 FNM = None
 
@@ -291,7 +292,16 @@ def watershedmethod(image):
     #find the peaks in the image, return the points as a nx2 array
     #min_distance is a super important argument,changes the minimum distance allowed betwen maxima
     #added absolute threshold so that the background doesnt get selected...
-    points = skfeat.peak_local_max(temp,min_distance=mindist,threshold_abs = 2, indices=True)
+    #Need to fix this whole function for the future warnings I keep getting:
+    
+    #To avoid this warning, please do not use the indices argument. Please see peak_local_max documentation for more details.
+    #  points = skfeat.peak_local_max(temp,min_distance=mindist,threshold_abs = 2, indices=True)
+    #C:\Users\Don_Hood\Anaconda3\envs\MBARS\lib\site-packages\skimage\morphology\_deprecated.py:5: skimage_deprecation: Function ``watershed`` is deprecated and will be removed in version 0.19. Use ``skimage.segmentation.watershed`` instead.
+    #  def watershed(image, markers=None, connectivity=1, offset=None, mask=None,
+    
+
+    #dropped the "indices" argument as requiested by the warning, indices is now always "true" so the argument is not needed
+    points = skfeat.peak_local_max(temp,min_distance=mindist,threshold_abs = 2)
 
     #put in a guard against images with no shadows
     threshold = len(image.compressed())/2
@@ -300,7 +310,7 @@ def watershedmethod(image):
     #prepare to convert the points matrix to an image-like array
     #this could perhaps be done with DBSCAN
     
-    cores,labels = skcluster.dbscan(points,2,2)
+    cores,labels = skcluster.dbscan(points,eps=2,min_samples=2)
     
     view = np.zeros_like(image)
     flag = 2
@@ -326,8 +336,9 @@ def watershedmethod(image):
         however it takes the mask in the opposite sense of the masked arrays
         in ndarrays, the mask is True where you want it masked, watershed wants 0
     '''
-            
-    boulds = skmorph.watershed(image.filled(np.max(image)+1), view.filled(0),mask=~view.mask)
+    #changed the skmorph.watershed to skseg.watershed    
+    #API suggests none of the arguments have changed, so this should be an easy swap    
+    boulds = skseg.watershed(image.filled(np.max(image)+1), view.filled(0),mask=~view.mask)
 
     return boulds
 
