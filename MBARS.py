@@ -303,12 +303,15 @@ def watershedmethod(image):
     #dropped the "indices" argument as requiested by the warning, indices is now always "true" so the argument is not needed
     points = skfeat.peak_local_max(temp,min_distance=mindist,threshold_abs = 2)
 
-    #put in a guard against images with no shadows
+    #put in a guard against images with no shadows where the entire image is black
+    # and images where there are no minima (likely nothing that isnt masked)
     threshold = len(image.compressed())/2
-    if len(points)>threshold:
+    if len(points)>threshold or len(points)==0:
         return np.ones_like(image)
+
     #prepare to convert the points matrix to an image-like array
     #this could perhaps be done with DBSCAN
+    #some 0-length arrays are making it to DBSCAN, not sure why...
     
     cores,labels = skcluster.dbscan(points,eps=2,min_samples=2)
     
@@ -1179,7 +1182,7 @@ def getshads(runfile, num, silenced = True, mode='rb'):
     #open and prep a shadow file, returns open file object and endpoint
     #current()
     try:
-        load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num), mode)
+        load = open('%s%s//%s%s%s_shadows.shad'%(PATH,FNM,runfile,FNM,num), mode)
     except IOError:
         if not silenced:
             print ("No shadow file exists")
@@ -1500,12 +1503,12 @@ def ExamineImage(runfile,num, showblanks,filt = True):
             patches1 += dat.patchplot(filt)
             patches2 +=dat.patchplot(filt)
         #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
-        image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
-        segimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num),allow_pickle=True)
+        image = imageio.imread('%s%s//%s%s.PNG'%(PATH,FNM,FNM,num))
+        segimage = np.load('%s%s//%s%s%s_SEG.npy'%(PATH,FNM,runfile,FNM,num),allow_pickle=True)
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
         #segimage = sktrans.rotate(segimage,ROTANG, resize=True, preserve_range=True)
         image = npma.masked_equal(image, 0)
-        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num),allow_pickle=True)
+        filtimage = np.load('%s%s//%s%s%s_flagged.npy'%(PATH,FNM,runfile,FNM,num),allow_pickle=True)
         
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
@@ -1524,10 +1527,10 @@ def ExamineImage(runfile,num, showblanks,filt = True):
 ##        plt.show()
     elif showblanks:
         #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
-        image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
+        image = imageio.imread('%s%s//%s%s.PNG'%(PATH,FNM,FNM,num))
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
         image = npma.masked_equal(image, 0)
-        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num),allow_pickle=True)
+        filtimage = np.load('%s%s//%s%s%s_flagged.npy'%(PATH,FNM,runfile,FNM,num),allow_pickle=True)
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
         ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
@@ -1824,6 +1827,7 @@ def getangles(ID, path = REFPATH):
     glong = float(dat[30])
     slat = float(dat[27])
     slong = float(dat[28])
+    #the issue is most apparent when the slon and glon are >180 apart. I think this can be fixed (see groundaz)
     sunangle = groundaz(glat,glong,slat,slong)
 
     if NOMAP:
@@ -1888,16 +1892,17 @@ def groundaz(glat, glon, slat, slon):
         if ((cglon-cslon)>180):
             while ((cglon-cslon)>180):
                 cglon=cglon-360
-
+    #I think if this was  changed to evaluate on cglon and cslon instead of glat and glon, it would work.
+    #Did the above change, Hopefully it fixes it
     if (slat>=glat):
-        if (slon>=glon):
+        if (cslon>=cglon):
             quad=1
 
         else:
             quad=2
 
     else:
-        if (slon>=glon):
+        if (cslon>=cglon):
             quad=4
 
         else:
