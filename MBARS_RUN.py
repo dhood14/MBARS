@@ -8,14 +8,33 @@ import threading
 '''
 set number of images, this is expecting a series of images with the same root name
 and numerals at the end, i.e. "root0.PNG" and "root23.PNG"
+
+
+Possibly consider a way to make this check them all for running instructions first, then run them all in order
+This would put more of the user-interface up front.
+
 '''
+
+PATH = MBARS.BASEPATH
 filenames = []
 
 FRACS = [30,40,50,60,70]
+#FRACS = [80,90,100]
 
 #Should rework this to work with input files that point it at files to run.
 #This will clean things up a lot I think.
+'''
+#Some prep code that I think will work for pulling in runfiles.
+#Store the runfile in the MBARS/Images folder
+#The file will be a list of filenames seperated by commas
+batchfnm = 'BatchTest.csv'
+batchfile = open('%s%s'%(PATH,batchfnm))
+fnms = batchfile.readline()
+filenames = fnms.split(',')
 
+
+
+'''
 #filename += 'ESP_011357_2285_RED300PX'
 
 
@@ -28,8 +47,8 @@ FRACS = [30,40,50,60,70]
 
 #filenames += ['PSP_001391_2465_RED500PX']
 #filenames += ['PSP_001391_2465_RED16bit500PX']
-filenames += ['PSP_001391_2465_RED16bit_1000PX']
-filenames+=['TRA_000828_2495_RED16bit_500PX']
+#filenames += ['PSP_001391_2465_RED16bit_1000PX']
+#filenames+=['TRA_000828_2495_RED16bit_500PX']
 
 #McNaughton Comparison
 #filenames+= ['PSP_002387_1985_RED16bit_500PX']
@@ -37,20 +56,20 @@ filenames+=['TRA_000828_2495_RED16bit_500PX']
 
 #viking 1 lander setup:
 
-#filenames += ['PSP_001521_2025_RED16bit100PNL44']
-#filenames +=['PSP_001719_2025_RED16bit100PNL52_500PX']
-#filenames +=['ESP_046170_2025_RED16bit100PNL52_500PX']
+#filenames += ['PSP_001521_2025_RED_1000PX']
+#filenames +=['PSP_001719_2025_RED_1000PX']
+#filenames +=['ESP_046170_2025_RED_1000PX']
 
 
 
 #viking 2 lander images
-#filenames+=['PSP_001976_2280_RED16bit100PNL52_500PX']
-#filenames+=['PSP_002055_2280_RED16bit100PNL57_500PX']
-#filenames+=['PSP_001501_2280_RED16bit100PNL47']
+#filenames+=['PSP_001976_2280_RED_1000PX']
+#filenames+=['PSP_002055_2280_RED_1000PX']
+#filenames+=['PSP_001501_2280_RED_1000PX']
 
 
 #PSP_007718 subset images
-#filenames = ['PSP_007718_2350_']
+#filenames = ['PSP_007718_2350_RED_1000PX']
 #filenames += ['PSP_007718_2350_RED16bit500PX']
 #filenames += ['PSP_007718_2350_RED300px']
 
@@ -60,7 +79,7 @@ filenames+=['TRA_000828_2495_RED16bit_500PX']
 #Proposal Test Images
 #filenames += ['PSP_001415_2470_RED500PX']
 #filenames+= ['PSP_001415_2470_RED16bit500PX']
-filenames+=['PSP_001415_2470_RED16bit_1000PX']
+#filenames+=['PSP_001415_2470_RED16bit_1000PX']
 #filenames+=['PSP_001741_2395_RED16bit_500PX']
 #filenames+=['PSP_001481_2410_RED16bit_500PX']
 #filenames+=['PSP_001473_2480_RED16bit_500PX']
@@ -69,6 +88,13 @@ filenames+=['PSP_001415_2470_RED16bit_1000PX']
 #filenames+=['PSP_001482_2490_RED16bit_500PX']
 #filenames+=['PSP_001484_2455_RED16bit_500PX']
 #filenames+=['PSP_001742_2370_RED16bit']
+
+#MDAP Images Y01-05
+#filenames+=['PSP_001738_2345_RED_1000PX']
+#filenames+=['PSP_001785_2330_RED_1000PX']
+#filenames+=['PSP_007803_2375_RED_1000PX']
+filenames+=['ESP_018211_2370_RED_1000PX']
+filenames+=['PSP_009086_2360_RED_1000PX']
 
 
 ######SOME CONTROLS###################
@@ -101,7 +127,7 @@ def thread_run(filename,plot,startat, frac):
 
     MBARS.FNM, MBARS.ID, MBARS.NOMAP,panels = MBARS.RunParams(filename)
 
-    MBARS.PATH = 'D://MBARS//Images//%s//'%(MBARS.FNM)
+    MBARS.PATH = '%s%s//'%(PATH,MBARS.FNM)
     MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
     #set the proportion of the shadow to use here
     bound = MBARS.getimagebound(panels,frac)
@@ -133,6 +159,7 @@ def thread_run(filename,plot,startat, frac):
         i.join()
     
     t2 = time.process_time()
+    #This time is coming up very wrong.....
     ttime = (t2-t1)/3600.
     print ('total time: '+str(ttime)+'hours')
     #this is to note the last running conditions:
@@ -146,7 +173,12 @@ def thread_run(filename,plot,startat, frac):
 #setup all the parameters before running
 #for i in filenames:
     #mangam, manbound = MBARS.FindIdealParams(i)
-    
+
+#Set up the files before running all of them
+for i in filenames:
+    print (i)
+    a,b,c,d = MBARS.RunParams(i)
+#actually run the analysis on all of them
 for i in filenames:
     for j in FRACS:
         PNLS = thread_run(i,plot,startat,j)

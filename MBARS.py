@@ -43,6 +43,8 @@ except(NameError):
 REFPATH = 'C://Users//Don_Hood//Documents//MBARS//RefData//'
 #BASEPATH is where MBARS will look for the provided filename
 BASEPATH = 'C://Users//Don_Hood//Documents//MBARS//Images//'
+#The PATH variable is modified to be the BASEPATH + the filename, where to look
+#for the images for a given MBARS run.
 PATH = None
 FNM = None
 
@@ -64,7 +66,7 @@ ROTANG = None
 MD = 30
 MH = 30
 #maximum shadow area, taken before measrements, based soleley on the shadow area
-MA = 300
+MA = 3000
 #minimum accepted shadow size expressed in pixels
 minA = 4
 #minimum distance between maxima in the  watershed splitting
@@ -1182,7 +1184,7 @@ def getshads(runfile, num, silenced = True, mode='rb'):
     #open and prep a shadow file, returns open file object and endpoint
     #current()
     try:
-        load = open('%s%s//%s%s%s_shadows.shad'%(PATH,FNM,runfile,FNM,num), mode)
+        load = open('%s%s%s%s_shadows.shad'%(PATH,runfile,FNM,num), mode)
     except IOError:
         if not silenced:
             print ("No shadow file exists")
@@ -1510,7 +1512,7 @@ def ExamineImage(runfile,num, showblanks,filt = True):
         image = npma.masked_equal(image, 0)
         filtimage = np.load('%s%s//%s%s%s_flagged.npy'%(PATH,FNM,runfile,FNM,num),allow_pickle=True)
         
-        fig,ax = plt.subplots(2,2,sharex = True, sharey = True)
+        fig,ax = plt.subplots(2,2,sharex = True, sharey = True, figsize=(30,30))
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
         ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
         ax[1][0].imshow(segimage,interpolation='none')
@@ -1646,6 +1648,7 @@ def ManualMerge(runfile,num,flags):
     
     
 ##Very important##
+#Looks like dlow and dhigh are not used??
 def OutToGIS(runfile,writefile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
     '''this code will take an entire run and export the boulder data to a GIS-interpretable format, assume pngs for the moment'''
     ''' A key part of this is interpreting the PGW files, which follow this convention:
@@ -1679,6 +1682,7 @@ def OutToGIS(runfile,writefile,maxnum,dlow = 1.0, dhigh = 5,extension='.PGw'):
             continue
         shads = getshads(runfile,i)
         if not shads:
+            print('no shads for %s\n'%(i))
             continue
         lycent = len(seg)/2.
         lxcent = len(seg[0])/2.
