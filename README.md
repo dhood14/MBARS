@@ -12,6 +12,7 @@ MBARS is designed to be compatible with Python 2.7 and 3+, however, compatibilit
  - sci-kit learn (sklearn)
  - imageio
  - threading
+
 Many of these will be pre-loaded with a standard python distrubtion.
 
 # Setup
@@ -52,7 +53,7 @@ discussed here. Details on one approach to calibrate MBARS for application to th
  - The JOSS Paper, Ca. 2022 ??
  - THe paper that we will publish in 2022 about the algorithm??
  - The Martian Boulder Automatic Recognition System: Comparison to Old and New Techniques (Link TBA, LPSC 2022)
- - Large-Scale Assessment of Polygon-Edge Boulder Clustering in the Martian Northern Lowlands (LInk TBA, LPSC 2020)
+ - Large-Scale Assessment of Polygon-Edge Boulder Clustering in the Martian Northern Lowlands (Link TBA, LPSC 2020)
  - Verification of Automatically Measured Boulder Populations in HiRISE Images (Link TBAdded, LPSC 2019)
  - Automated Boulder Detection and Measuring in HiRISE images (link TBAdded, LPSC 2018)
  - Semi-Automated Measurement of Boulder Clustering in the Martian Northern Plains (link TBAdded??, LPSC 2017)
@@ -68,5 +69,8 @@ discussed here. Details on one approach to calibrate MBARS for application to th
  
 #Acknowledgements
 Testing, development, and application of this algorithm have been funded at various stages by both the Louisiana Space Consortium (LaSPACE) and the NASA Mars Data Analysis Program
-(Grant #80NSSC21K1093). Drs. Karunatillake and Fassett must be credited for developing many of the original ideas and applications of what would ultimately become MBARS, before passing
+(Grant #80NSSC21K1093). Drs. Karunatillake and Fassett are credited for developing many of the original ideas and applications of what would ultimately become MBARS, before passing
 along those ideas to Dr. Hood as a part of his Ph.D. Dissertation work.
+
+#License
+This work is published under the MIT license, see LICENSE.md for details
