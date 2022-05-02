@@ -17,9 +17,14 @@ This would put more of the user-interface up front.
 
 PATH = MBARS.BASEPATH
 filenames = []
+#Low-run
+#FRACS = [10,20]
+#standard run
+FRACS = [10,20,30,40,50,60,70,80,85]
 
-FRACS = [30,40,50,60,70]
-#FRACS = [80,90,100]
+#high-Run
+#FRACS = [90,95,100]
+#FRACS = [100]
 
 #Should rework this to work with input files that point it at files to run.
 #This will clean things up a lot I think.
@@ -77,7 +82,7 @@ filenames = fnms.split(',')
 #filenames += ['PSP_007693_2300_RED16bit500PX']
 
 #Proposal Test Images
-#filenames += ['PSP_001415_2470_RED500PX']
+#filenames += ['PSP_001415_2470_RED16bit_1000PX']
 #filenames+= ['PSP_001415_2470_RED16bit500PX']
 #filenames+=['PSP_001415_2470_RED16bit_1000PX']
 #filenames+=['PSP_001741_2395_RED16bit_500PX']
@@ -93,9 +98,14 @@ filenames = fnms.split(',')
 #filenames+=['PSP_001738_2345_RED_1000PX']
 #filenames+=['PSP_001785_2330_RED_1000PX']
 #filenames+=['PSP_007803_2375_RED_1000PX']
-filenames+=['ESP_018211_2370_RED_1000PX']
-filenames+=['PSP_009086_2360_RED_1000PX']
+#filenames+=['ESP_018211_2370_RED_1000PX']
+#filenames+=['PSP_009086_2360_RED_1000PX']
 
+#MDAP Images Y06-10
+#filenames+=['PSP_010141_2360_RED_1000PX']
+#filenames+=['PSP_009604_2310_RED_1000PX']
+filenames+=['PSP_001418_2495_RED_1000PX']
+filenames+=['ESP_018139_2315_RED_1000PX']
 
 ######SOME CONTROLS###################
 #produce intermediate plots, False unless you are debugging something
@@ -133,7 +143,7 @@ def thread_run(filename,plot,startat, frac):
     bound = MBARS.getimagebound(panels,frac)
     mangam = 0
     manbound = 0
-    t1 = time.process_time()
+    t1 = time.time()
     
     threads = []
     krange = range(startat,panels)
@@ -158,7 +168,7 @@ def thread_run(filename,plot,startat, frac):
     for i in threads:
         i.join()
     
-    t2 = time.process_time()
+    t2 = time.time()
     #This time is coming up very wrong.....
     ttime = (t2-t1)/3600.
     print ('total time: '+str(ttime)+'hours')
