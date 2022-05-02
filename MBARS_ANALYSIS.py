@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import scipy.misc as spm
 import numpy as np
 import time
-import cPickle as pickle
-import shutil
+#import cPickle as pickle
+import pickle
 import matplotlib.patches as patches
 import os
 from numpy import ma as npma
@@ -12,9 +12,17 @@ import skimage.transform as sktrans
 import skimage.util as skutil
 import imageio
 '''
-Catch all code to look at results
+Catch all code to look at results,
+
+Because the MBARS_RUN.py file now does everything out to exporting to GIS,
+this code is potentially defunct. May still have some utility for troubleshooting though.
+
 '''
 
+try:
+    raw_input = input
+except(NameError):
+    pass
 
 
 
@@ -37,7 +45,8 @@ Catch all code to look at results
 
 #Golombek Comparison Images
 #filename = 'TRA_000828_2495_RED500PX'
-filename = 'TRA_000828_2495_RED_16bit'
+#filename = 'TRA_000828_2495_RED_16bit'
+#filename = 'TRA_000828_2495_RED16bit_500PX'
 #runfile = 'autobound//'
 #runfile = 'gam600_manbound159//'
 #filename = 'PSP_001391_2465_RED500PX'
@@ -48,25 +57,7 @@ filename = 'TRA_000828_2495_RED_16bit'
 #filename = 'PSP_002387_1985_RED16bit_500PX'
 #filename = 'PSP_002387_1985_RED16bit_Dtop_500PX'
 
-#viking 1 lander images:
-#filename = 'PSP_001521_2025_RED100PNL47_500PX'
-#filename = 'PSP_001521_2025_RED16bit100PNL44'
-#filename = 'PSP_001719_2025_RED100PNL52_500PX'
-#filename = 'ESP_046170_2025_RED_100PNL52_500PX'
-
-#filename = 'PSP_001521_2025_RED16bit100PNL44'
-#filename ='PSP_001719_2025_RED16bit100PNL52_500PX'
-#filename ='ESP_046170_2025_RED16bit100PNL52_500PX'
-
-#Viking 2 lander:
-#filename = 'PSP_001501_2280_RED100PNL47_500PX'
-#filename = 'PSP_001976_2280_RED100PNL52_500PX'
-#filename = 'PSP_002055_2280_RED100PNL57_500PX'
-
-#filename='PSP_001976_2280_RED16bit100PNL52_500PX'
-#filename='PSP_002055_2280_RED16bit100PNL57_500PX'
-#filename='PSP_001501_2280_RED16bit100PNL47'
-
+filename = 'ESP_018211_2370_RED_1000PX'
 #Joes Images
 #filename = 'PSP_007693_2300_RED16bit500PX'
 #runfile = 'gam600_manbound173//'
@@ -89,8 +80,9 @@ runfile='autobound//'
 
 #runfile = 'gam600_manbound147//'
 
-MBARS.PATH = 'C://Users//dhood7//Desktop//MBARS//Images//%s//'%(filename)
+
 MBARS.FNM = filename
+MBARS.PATH = MBARS.BASEPATH+filename+'//'
 root, MBARS.ID, MBARS.NOMAP, panels = MBARS.RunParams(filename)
 MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
 
@@ -100,7 +92,7 @@ ManualMerge = False
 OutToGIS = True
 MakeCFAs = False
 bigs = False
-imageanalysis = False
+imageanalysis = True
 
 #Can manually reduce the panels to look at results subsets
 #panels = 3000
@@ -123,19 +115,19 @@ showblanks = False
 
 
 #check for the proper path:
-if not os.path.exists('%s%s'%(MBARS.PATH,runfile)):
-    print 'runfile does not exist for this image, check runfile'
-    exit()
+if not os.path.exists('%s%s%s'%(MBARS.PATH,MBARS.FNM,runfile)):
+    print ('runfile does not exist for this image, check runfile')
+    #exit()
 #where the actual work happens
 if ManualMerge:
     query = 'Did you mean to do a manual Merge?\n y/n?\n'
     answer = raw_input(query)
     if answer != 'y':
-        print 'OK I wont do it'
+        print ('OK I wont do it')
     else:
         MBARS.ManualMerge(runfile,MMnum,MMflags)
 if OutToGIS:
-    MBARS.OutToGIS(runfile,panels)
+    MBARS.OutToGIS(runfile,'autobound_test//',panels)
 
 if MakeCFAs:
     record = file('%s%s_record.csv'%(MBARS.PATH,MBARS.FNM),mode='wb')
@@ -143,7 +135,7 @@ if MakeCFAs:
     plt.figure(runfile)
     fit_k,upfit_k,downfit_k, fit_r2 = MBARS.bulkCFA(runfile,panels+1,maxd,2.25,root)
 
-    print'Best fit rock abundance for file %s is %s percent, up to %s, or down to %s with an R^2 of %s'%(runfile,fit_k*100,upfit_k*100,downfit_k*100, fit_r2)
+    print('Best fit rock abundance for file %s is %s percent, up to %s, or down to %s with an R^2 of %s'%(runfile,fit_k*100,upfit_k*100,downfit_k*100, fit_r2))
     #MBARS.plotCFArefs()
     plt.show()
     record.write('%s,%s,%s,%s,%s\n'%(runfile,fit_k,fit_r2,upfit_k,downfit_k))
@@ -163,7 +155,7 @@ if imageanalysis:
         try:
             MBARS.ExamineImage(runfile,num, showblanks)
         except:
-            print "Failed to examine, image does not exist"
+            print ("Failed to examine, image does not exist")
         query = 'Look at another? y/n\n'
         answer = raw_input(query)
         if answer != 'y':
