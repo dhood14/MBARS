@@ -66,10 +66,10 @@ discussed here. Details on one approach to calibrate MBARS for application to th
  - Peter James, Science Advisor
  - James P. Brothers, User Testing and Boulder measurement
  
-#Acknowledgements
+# Acknowledgements
 Testing, development, and application of this algorithm have been funded at various stages by both the Louisiana Space Consortium (LaSPACE) and the NASA Mars Data Analysis Program
 (Grant #80NSSC21K1093). Drs. Karunatillake and Fassett are credited for developing many of the original ideas and applications of what would ultimately become MBARS, before passing
 along those ideas to Dr. Hood as a part of his Ph.D. Dissertation work.
 
-#License
+# License
 This work is published under the MIT license, see LICENSE.md for details
