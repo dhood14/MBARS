@@ -1,4 +1,5 @@
 import sys
+#maytbe can take this out?
 sys.path.append('C:\\Python27\\Lib\\site-packages')
 import numpy as np
 import scipy as sp
@@ -1820,7 +1821,7 @@ def getangles(ID, path = REFPATH):
         Incedence Angle:        20
         North Azimuth:          25
         Sun Azimuth:            26
-        Resolution:             40
+        Resolution (m/px):             39
         Projection_type:        41     
     """
     
@@ -1831,6 +1832,7 @@ def getangles(ID, path = REFPATH):
     glong = float(dat[30])
     slat = float(dat[27])
     slong = float(dat[28])
+    res = float(dat[39])
     #the issue is most apparent when the slon and glon are >180 apart. I think this can be fixed (see groundaz)
     sunangle = groundaz(glat,glong,slat,slong)
 
@@ -1851,18 +1853,18 @@ def getangles(ID, path = REFPATH):
 
     ''' Inangle is returned as measured from azimuth, sunangle as clockwise from North'''
     
-    #HiRISE_INFO has the resolution, PID is on index 11, resolution on the last one
-    info = open(path+'HiRISE_INFO.txt','r')
-    for line in info:
-        try: dat=line
-        except EOFError:
-            print ('No such HiRISE image, check product ID or update CUMINDEX file')
-            return None, None, None
-        dat = dat.split(',')
-        if ID == dat[11]:
-            break
-    res = dat[-1].strip()
-    res = float(res)
+    # #HiRISE_INFO has the resolution, PID is on index 11, resolution on the last one
+    # info = open(path+'HiRISE_INFO.txt','r')
+    # for line in info:
+    #     try: dat=line
+    #     except EOFError:
+    #         print ('No such HiRISE image, check product ID or update CUMINDEX file')
+    #         return None, None, None
+    #     dat = dat.split(',')
+    #     if ID == dat[11]:
+    #         break
+    # res = dat[-1].strip()
+    # res = float(res)
     
     
         
