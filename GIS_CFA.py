@@ -212,7 +212,7 @@ def run(path,fnm,widcol,fgcol,acol,resolution):
         
         if len(prefilt)==0:
             #Input boulder file has no boulders, reject
-            print("No Boulders in %s"(fullpath))
+            print("No Boulders in %s"%(fullpath))
             return DeadReturn
         
         AREA = prefilt[0][2]
