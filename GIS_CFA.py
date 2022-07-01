@@ -59,19 +59,36 @@ Manual = 0
 #Y06-10
 #image = 'PSP_010141_2360_RED_1000PX//'
 #image = 'PSP_009604_2310_RED_1000PX//'
-image = 'PSP_001418_2495_RED_1000PX//'
+#image = 'PSP_001418_2495_RED_1000PX//'
+#image = 'ESP_018139_2315_RED_1000PX//'
+
+#Y11-15
+#image = 'PSP_001482_2490_RED_1000PX//'
+#image = 'PSP_001505_2485_RED_1000PX//'
+#image = 'PSP_001559_2485_RED_1000PX//'
+#image = 'PSP_001473_2480_RED_1000PX//'
+#image = 'PSP_001430_2470_RED_1000PX//'
+
+#Y21-25
+#image = 'PSP_001721_2460_RED_1000PX//'
+#image = 'PSP_001813_2455_RED_1000PX//'
+#image = 'PSP_001681_2455_RED_1000PX//'
+#image = 'PSP_001814_2455_RED_1000PX//'
+image = 'PSP_001481_2410_RED_1000PX//'
 
 
 #Specify the percentiles (suffix on the autobound_## file) and test area names
 percs = ['10','20','30','40','50','60','70','80','85']
-#percs = ['80','85','90','95']
-#percs = ['10','20','30','40','50','60','70','80','85','90','95']
+#percs = ['90','95','100']
+#percs = ['30','40','50','60','70']
 #percs = ['100']
 #areas = ['A','B','C','D']
-areas = ['A','B']
+areas = ['A','B','C']
+#areas = ['A','B']
 #areas = ['1','2','3']
 
 bnm = 'Clean'
+#bnm = "All"
 
 #Specfy the column where the widths are! 0 is the first column
 
@@ -106,12 +123,12 @@ if Manual:
     areacol = 5
     #PATH = 'C://Users//Don_Hood//Documents//MBARS//ImagePrep//VL2//'
     #PATH = 'c://Users//Don_Hood//Documents//MBARS//RefData//PSP_007718_2350//'
-    PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_06_10//ManualData//'
-    #PATH = 'c://Users//Don_Hood//Documents//MBARS//Images//TRA_000828_2495_RED_16bit//GISFiles//'
+    PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_21_25//Manual_Data//'
+    #PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_01_05_ManualData//'
     paramlist = []
-    paramlist+=[(PATH,'PSP_001418_2495_Manual_A',widcol,fgcol,areacol,resolution)]
-    paramlist+=[(PATH,'PSP_001418_2495_Manual_B',widcol,fgcol,areacol,resolution)]
-    #paramlist+=[(PATH,'TRA_828_B_Manual_JB',widcol,fgcol,areacol,resolution)]
+    paramlist+=[(PATH,'PSP_001481_2410_Manual_A',widcol,fgcol,areacol,resolution)]
+    paramlist+=[(PATH,'PSP_001481_2410_Manual_B',widcol,fgcol,areacol,resolution)]
+    paramlist+=[(PATH,'PSP_001481_2410_Manual_C',widcol,fgcol,areacol,resolution)]
     #paramlist+=[(PATH,'TRA_828_B_Manual_DH',widcol,fgcol,areacol,resolution)]
     #paramlist = []
     runfile=''
@@ -184,14 +201,19 @@ def fittoRA(xdat,ydat,RNG = [1.5,2.25]):
 def run(path,fnm,widcol,fgcol,acol,resolution):
     outstring = '%s//%s_CFA.csv'%(path,fnm)
     fullpath = '%s%s%s'%(path,fnm,ext)
+    DeadReturn = ('',[],[],None,None)
     with open(outstring,'w') as output:
         try:
             data = open(fullpath,'r')
         except(FileNotFoundError):
-            "%s not found"%(fullpath)
-            return ('',[],[],None,None)
+            print("%s not found"%(fullpath))
+            return DeadReturn
         prefilt = np.loadtxt(data,delimiter=',',skiprows = 1,usecols = (widcol,fgcol,acol),ndmin=2)
         
+        if len(prefilt)==0:
+            #Input boulder file has no boulders, reject
+            print("No Boulders in %s"(fullpath))
+            return DeadReturn
         
         AREA = prefilt[0][2]
         widths = list(prefilt)

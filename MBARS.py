@@ -1821,7 +1821,7 @@ def getangles(ID, path = REFPATH):
         Incedence Angle:        20
         North Azimuth:          25
         Sun Azimuth:            26
-        Resolution (m/px):             39
+        Resolution (m/px):      39
         Projection_type:        41     
     """
     
@@ -1957,6 +1957,9 @@ root
 ID
 NOMAP
 Panels
+Need to add a way to change these parameters if you want to....maybe?
+Also could probably drop most of it (just the ID and the projection)
+
 '''
     parampath = '%s%s//runparams.txt'%(BASEPATH,filename)
     if not os.path.isdir('%s%s'%(BASEPATH,filename)):

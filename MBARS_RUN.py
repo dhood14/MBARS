@@ -20,10 +20,10 @@ filenames = []
 #Low-run
 #FRACS = [10,20]
 #standard run
-FRACS = [10,20,30,40,50,60,70,80,85]
+#FRACS = [10,20,30,40,50,60,70,80,85]
 
 #high-Run
-#FRACS = [90,95,100]
+FRACS = [90,95,100]
 #FRACS = [100]
 
 #Should rework this to work with input files that point it at files to run.
@@ -104,8 +104,22 @@ filenames = fnms.split(',')
 #MDAP Images Y06-10
 #filenames+=['PSP_010141_2360_RED_1000PX']
 #filenames+=['PSP_009604_2310_RED_1000PX']
-filenames+=['PSP_001418_2495_RED_1000PX']
-filenames+=['ESP_018139_2315_RED_1000PX']
+#filenames+=['PSP_001418_2495_RED_1000PX']
+#filenames+=['ESP_018139_2315_RED_1000PX']
+
+#MDAP Images Y11-Y15
+#filenames+=['PSP_001482_2490_RED_1000PX']
+#filenames+=['PSP_001505_2485_RED_1000PX']
+#filenames+=['PSP_001559_2485_RED_1000PX']
+#filenames+=['PSP_001473_2480_RED_1000PX']
+#filenames+=['PSP_001430_2470_RED_1000PX']
+
+#Y21-25
+#filenames += ['PSP_001721_2460_RED_1000PX']
+#filenames+= ['PSP_001813_2455_RED_1000PX']
+#filenames+=['PSP_001681_2455_RED_1000PX']
+filenames+=['PSP_001814_2455_RED_1000PX']
+#filenames+=['PSP_001481_2410_RED_1000PX']
 
 ######SOME CONTROLS###################
 #produce intermediate plots, False unless you are debugging something
