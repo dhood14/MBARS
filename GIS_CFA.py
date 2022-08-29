@@ -266,8 +266,10 @@ oresults = []
 for params in paramlist:
     if len(params)== 6:
         fpath,fnm,widcol,fgcol,areacol,resolution = params
+        ManAreas = False
     else:
         fpath,fnm,widcol,fgcol,areacol,resolution,ManAreas = params
+    
     oresult = run(fpath,fnm,widcol,fgcol,areacol,resolution,ManAreas)
     oresults+=[oresult]
 
