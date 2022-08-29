@@ -23,70 +23,35 @@ ext = '.txt'
 #ext = '.csv'
 
 #set wether using the auto or manual runs
-Auto = 1
+Auto = 0
 Manual = 0
+WholeImage = 1
 
 #EXAMPLE ENTRY
 #image = 'filename//'
 #The above setting will send the program to BASEPATH//filename//GISFiles// to look for the output data
 
+#Auto Settings & WholeImage Settings
+#Y31-35
+image = 'PSP_001668_2460_RED_1000PX//'
+#image = 'PSP_001669_2460_RED_1000PX//'
+#image = 'PSP_001576_2460_RED_1000PX//'
+#image = 'PSP_001655_2460_RED_1000PX//'
+#image = 'PSP_001484_2455_RED_1000PX//'
 
-#image = 'PSP_007718_2350_//'
-#image = 'PSP_007718_2350_RED_1000PX//'
-#image = 'TRA_000828_2495_RED_16bit//'
-#image = 'TRA_000828_2495_RED16bit_500PX//'
-#image = 'PSP_001391_2465_RED16bit_1000PX//'
-#image = 'PSP_001415_2470_RED16bit_1000PX//'
-#image = 'PSP_001481_2410_RED16bit_500PX//'
+#Specify the percentiles (FRAC Values) (suffix on the autobound_## file) and test area names
+fracs = ['10','20','30','40','50','60','70','80','85']
+#fracs = ['90','95','100']
 
-#VL1 Images
-#image = 'PSP_001521_2025_RED_1000PX//'
-#image = 'PSP_001719_2025_RED_1000PX//'
-#image = 'ESP_046170_2025_RED_1000PX//'
-
-#VL2 Images
-#image = 'PSP_001501_2280_RED_1000PX//'
-#image = 'PSP_001976_2280_RED_1000PX//'
-#image = 'PSP_002055_2280_RED_1000PX//'
-
-#Y01-05
-#image = 'PSP_001738_2345_RED_1000PX//'
-#image = 'PSP_001785_2330_RED_1000PX//'
-#image = 'PSP_007803_2375_RED_1000PX//'
-#image = 'ESP_018211_2370_RED_1000PX//'
-#image = 'PSP_009086_2360_RED_1000PX//'
-
-#Y06-10
-#image = 'PSP_010141_2360_RED_1000PX//'
-#image = 'PSP_009604_2310_RED_1000PX//'
-#image = 'PSP_001418_2495_RED_1000PX//'
-#image = 'ESP_018139_2315_RED_1000PX//'
-
-#Y11-15
-#image = 'PSP_001482_2490_RED_1000PX//'
-#image = 'PSP_001505_2485_RED_1000PX//'
-#image = 'PSP_001559_2485_RED_1000PX//'
-#image = 'PSP_001473_2480_RED_1000PX//'
-#image = 'PSP_001430_2470_RED_1000PX//'
-
-#Y21-25
-#image = 'PSP_001721_2460_RED_1000PX//'
-#image = 'PSP_001813_2455_RED_1000PX//'
-#image = 'PSP_001681_2455_RED_1000PX//'
-#image = 'PSP_001814_2455_RED_1000PX//'
-image = 'PSP_001481_2410_RED_1000PX//'
-
-
-#Specify the percentiles (suffix on the autobound_## file) and test area names
-percs = ['10','20','30','40','50','60','70','80','85']
-#percs = ['90','95','100']
-#percs = ['30','40','50','60','70']
-#percs = ['100']
 #areas = ['A','B','C','D']
-areas = ['A','B','C']
-#areas = ['A','B']
+#areas = ['A','B','C']
+areas = ['A','B']
 #areas = ['1','2','3']
 
+#When doing a whole image, pick which FRAC value to use here
+finalfrac = '95'
+#specify the total image area, determined from ArcGIS in square meters
+area = 39910395
 bnm = 'Clean'
 #bnm = "All"
 
@@ -96,6 +61,9 @@ bnm = 'Clean'
 widcol = 6
 fgcol = 10
 areacol = 15
+
+
+
 
 #only for error purposes
 resolution = .25
@@ -109,7 +77,7 @@ PATH = MBARS.BASEPATH
 if Auto:
     Compile = True
     paramlist = []
-    for perc in percs:
+    for perc in fracs:
         for area in areas:
             runfile = 'autobound_%s//'%(perc)
             fnm = '%s_%s_%s'%(bnm,perc,area)
@@ -123,16 +91,29 @@ if Manual:
     areacol = 5
     #PATH = 'C://Users//Don_Hood//Documents//MBARS//ImagePrep//VL2//'
     #PATH = 'c://Users//Don_Hood//Documents//MBARS//RefData//PSP_007718_2350//'
-    PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_21_25//Manual_Data//'
+    PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_31_35//Manual_Data//'
     #PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_01_05_ManualData//'
     paramlist = []
-    paramlist+=[(PATH,'PSP_001481_2410_Manual_A',widcol,fgcol,areacol,resolution)]
-    paramlist+=[(PATH,'PSP_001481_2410_Manual_B',widcol,fgcol,areacol,resolution)]
-    paramlist+=[(PATH,'PSP_001481_2410_Manual_C',widcol,fgcol,areacol,resolution)]
+    paramlist+=[(PATH,'PSP_001484_2455_Manual_A',widcol,fgcol,areacol,resolution)]
+    paramlist+=[(PATH,'PSP_001484_2455_Manual_B',widcol,fgcol,areacol,resolution)]
+    #paramlist+=[(PATH,'PSP_001481_2410_Manual_C',widcol,fgcol,areacol,resolution)]
     #paramlist+=[(PATH,'TRA_828_B_Manual_DH',widcol,fgcol,areacol,resolution)]
     #paramlist = []
     runfile=''
 
+if WholeImage:
+    paramlist = []
+    Compile = False
+    ext = '.csv'
+    widcol = 4
+    fgcol = 8
+    areacol = 0
+    runfile = 'autobound_%s//'%(finalfrac)
+    
+    fpath = '%s%sGISFiles//%s'%(PATH,image,runfile)
+    
+    fnm = '%s_Clean_boulderdata'%(image[:-2])
+    paramlist+=[(fpath,fnm,widcol,fgcol,areacol,resolution,area)]
 #Make a CFA
 def GolomPSDCFA(D,k):
     ''' The Model curves used in Golombek's 2012 work, similar to those used in Li 2018
@@ -198,7 +179,7 @@ def fittoRA(xdat,ydat,RNG = [1.5,2.25]):
 
     
     
-def run(path,fnm,widcol,fgcol,acol,resolution):
+def run(path,fnm,widcol,fgcol,acol,resolution,ManArea=False):
     outstring = '%s//%s_CFA.csv'%(path,fnm)
     fullpath = '%s%s%s'%(path,fnm,ext)
     DeadReturn = ('',[],[],None,None)
@@ -214,8 +195,10 @@ def run(path,fnm,widcol,fgcol,acol,resolution):
             #Input boulder file has no boulders, reject
             print("No Boulders in %s"%(fullpath))
             return DeadReturn
-        
+
         AREA = prefilt[0][2]
+        if ManArea:
+            AREA = ManArea
         widths = list(prefilt)
         widths = [a[0] for a in widths if a[1] == 1.0]
         widths = list(map(float,widths))
@@ -281,8 +264,11 @@ def run(path,fnm,widcol,fgcol,acol,resolution):
         return results
 oresults = []
 for params in paramlist:
-    fpath,fnm,widcol,fgcol,areacol,resolution = params
-    oresult = run(fpath,fnm,widcol,fgcol,areacol,resolution)
+    if len(params)== 6:
+        fpath,fnm,widcol,fgcol,areacol,resolution = params
+    else:
+        fpath,fnm,widcol,fgcol,areacol,resolution,ManAreas = params
+    oresult = run(fpath,fnm,widcol,fgcol,areacol,resolution,ManAreas)
     oresults+=[oresult]
 
 if Compile:
