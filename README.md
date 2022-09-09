@@ -50,7 +50,7 @@ to factors such as soil albedo, lighting conditions, photometric properties of t
 discussed here. Details on one approach to calibrate MBARS for application to the martian northern lowlands and be found in Hood et al 2022 (To Be Submitted)
 
 # Publications
- - The Martian Boulder Automatic Recognition System, MBARS (In Press, 2022)
+ - The Martian Boulder Automatic Recognition System, MBARS (https://agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/2022EA002410, 2022)
  - The Martian Boulder Automatic Recognition System: Comparison to Old and New Techniques (https://www.hou.usra.edu/meetings/lpsc2022/pdf/1483.pdf, LPSC 2022)
  - Large-Scale Assessment of Polygon-Edge Boulder Clustering in the Martian Northern Lowlands (https://www.hou.usra.edu/meetings/lpsc2020/pdf/2620.pdf, LPSC 2020)
  - Verification of Automatically Measured Boulder Populations in HiRISE Images (https://www.hou.usra.edu/meetings/lpsc2019/pdf/1893.pdf, LPSC 2019)
@@ -69,7 +69,7 @@ discussed here. Details on one approach to calibrate MBARS for application to th
  
 # Acknowledgements
 Testing, development, and application of this algorithm have been funded at various stages by both the Louisiana Space Consortium (LaSPACE) and the NASA Mars Data Analysis Program
-(Grant #80NSSC21K1093). Drs. Karunatillake and Fassett are credited for developing many of the original ideas and applications of what would ultimately become MBARS, before passing
+(Grant #80NSSC21K1093D). Drs. Karunatillake and Fassett are credited for developing many of the original ideas and applications of what would ultimately become MBARS, before passing
 along those ideas to Dr. Hood as a part of his Ph.D. Dissertation work.
 
 # License
