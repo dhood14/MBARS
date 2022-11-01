@@ -47,7 +47,8 @@ filenames = fnms.split(',')
 #filenames+=['ESP_011571_2270_RED_1000PX']
 
 #filenames+=['ESP_073578_2155_RED_1000PX']
-#FRACS = [60,70,80,85]
+
+#FRACS = [30-85]
 #filenames+=['ESP_073077_2155_RED_1000PX']
 
 
@@ -58,12 +59,7 @@ filenames+=['ESP_017146_2385_RED_1000PX']
 filenames+=['ESP_011512_2330_RED_1000PX']
 filenames+=['ESP_009664_2305_RED_1000PX']
 
-#Y1_31-35
-#filenames+=['PSP_001668_2460_RED_1000PX']
-#filenames+=['PSP_001669_2460_RED_1000PX']
-#filenames+=['PSP_001576_2460_RED_1000PX']
-#filenames+=['PSP_001655_2460_RED_1000PX']
-#filenames+=['PSP_001484_2455_RED_1000PX']
+
 
 ######SOME CONTROLS###################
 #produce intermediate plots, False unless you are debugging something
