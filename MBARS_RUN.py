@@ -20,10 +20,10 @@ filenames = []
 #Low-run
 #FRACS = [10,20]
 #standard run
-#FRACS = [10,20,30,40,50,60,70,80,85]
+FRACS = [10,20,30,40,50,60,70,80,85]
 
 #high-Run
-FRACS = [90,95,100]
+#FRACS = [90,95,100]
 #FRACS = [100]
 
 #Should rework this to work with input files that point it at files to run.
@@ -40,86 +40,30 @@ filenames = fnms.split(',')
 
 
 '''
-#filename += 'ESP_011357_2285_RED300PX'
+
+#Impact Crater Images
+#re-run this one at some point
+#FRACS = [80,85]
+#filenames+=['ESP_011571_2270_RED_1000PX']
+
+#filenames+=['ESP_073578_2155_RED_1000PX']
+#FRACS = [60,70,80,85]
+#filenames+=['ESP_073077_2155_RED_1000PX']
 
 
-#filenameA = 'ESP_036437_2290_RED500PX'
-#filenames  = [filenameB,filenameC,filenameD]
+#Y2_01-05
+filenames+=['ESP_018126_2445_RED_1000PX']
+filenames+=['ESP_018158_2435_RED_1000PX']
+filenames+=['ESP_017146_2385_RED_1000PX']
+filenames+=['ESP_011512_2330_RED_1000PX']
+filenames+=['ESP_009664_2305_RED_1000PX']
 
-#GOlombek Comparison Images
-#filenames += ['TRA_000828_2495_RED500PX']
-#filenames +=['TRA_000828_2495_RED_16bit']
-
-#filenames += ['PSP_001391_2465_RED500PX']
-#filenames += ['PSP_001391_2465_RED16bit500PX']
-#filenames += ['PSP_001391_2465_RED16bit_1000PX']
-#filenames+=['TRA_000828_2495_RED16bit_500PX']
-
-#McNaughton Comparison
-#filenames+= ['PSP_002387_1985_RED16bit_500PX']
-#filenames+=['PSP_002387_1985_RED16bit_Dtop_500PX']
-
-#viking 1 lander setup:
-
-#filenames += ['PSP_001521_2025_RED_1000PX']
-#filenames +=['PSP_001719_2025_RED_1000PX']
-#filenames +=['ESP_046170_2025_RED_1000PX']
-
-
-
-#viking 2 lander images
-#filenames+=['PSP_001976_2280_RED_1000PX']
-#filenames+=['PSP_002055_2280_RED_1000PX']
-#filenames+=['PSP_001501_2280_RED_1000PX']
-
-
-#PSP_007718 subset images
-#filenames = ['PSP_007718_2350_RED_1000PX']
-#filenames += ['PSP_007718_2350_RED16bit500PX']
-#filenames += ['PSP_007718_2350_RED300px']
-
-#JoesImages
-#filenames += ['PSP_007693_2300_RED16bit500PX']
-
-#Proposal Test Images
-#filenames += ['PSP_001415_2470_RED16bit_1000PX']
-#filenames+= ['PSP_001415_2470_RED16bit500PX']
-#filenames+=['PSP_001415_2470_RED16bit_1000PX']
-#filenames+=['PSP_001741_2395_RED16bit_500PX']
-#filenames+=['PSP_001481_2410_RED16bit_500PX']
-#filenames+=['PSP_001473_2480_RED16bit_500PX']
-#filenames+=['PSP_001430_2470_RED16bit_500PX']
-#filenames+=['PSP_001418_2495_RED16bit_500PX']
-#filenames+=['PSP_001482_2490_RED16bit_500PX']
-#filenames+=['PSP_001484_2455_RED16bit_500PX']
-#filenames+=['PSP_001742_2370_RED16bit']
-
-#MDAP Images Y01-05
-#filenames+=['PSP_001738_2345_RED_1000PX']
-#filenames+=['PSP_001785_2330_RED_1000PX']
-#filenames+=['PSP_007803_2375_RED_1000PX']
-#filenames+=['ESP_018211_2370_RED_1000PX']
-#filenames+=['PSP_009086_2360_RED_1000PX']
-
-#MDAP Images Y06-10
-#filenames+=['PSP_010141_2360_RED_1000PX']
-#filenames+=['PSP_009604_2310_RED_1000PX']
-#filenames+=['PSP_001418_2495_RED_1000PX']
-#filenames+=['ESP_018139_2315_RED_1000PX']
-
-#MDAP Images Y11-Y15
-#filenames+=['PSP_001482_2490_RED_1000PX']
-#filenames+=['PSP_001505_2485_RED_1000PX']
-#filenames+=['PSP_001559_2485_RED_1000PX']
-#filenames+=['PSP_001473_2480_RED_1000PX']
-#filenames+=['PSP_001430_2470_RED_1000PX']
-
-#Y21-25
-#filenames += ['PSP_001721_2460_RED_1000PX']
-#filenames+= ['PSP_001813_2455_RED_1000PX']
-#filenames+=['PSP_001681_2455_RED_1000PX']
-filenames+=['PSP_001814_2455_RED_1000PX']
-#filenames+=['PSP_001481_2410_RED_1000PX']
+#Y1_31-35
+#filenames+=['PSP_001668_2460_RED_1000PX']
+#filenames+=['PSP_001669_2460_RED_1000PX']
+#filenames+=['PSP_001576_2460_RED_1000PX']
+#filenames+=['PSP_001655_2460_RED_1000PX']
+#filenames+=['PSP_001484_2455_RED_1000PX']
 
 ######SOME CONTROLS###################
 #produce intermediate plots, False unless you are debugging something

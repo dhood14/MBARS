@@ -24,16 +24,17 @@ ext = '.txt'
 
 #set wether using the auto or manual runs
 Auto = 0
-Manual = 0
-WholeImage = 1
+Manual = 1
+WholeImage = 0
 
 #EXAMPLE ENTRY
 #image = 'filename//'
 #The above setting will send the program to BASEPATH//filename//GISFiles// to look for the output data
 
 #Auto Settings & WholeImage Settings
+image = 'PSP_001738_2345_RED_1000PX//'
 #Y31-35
-image = 'PSP_001668_2460_RED_1000PX//'
+#image = 'PSP_001668_2460_RED_1000PX//'
 #image = 'PSP_001669_2460_RED_1000PX//'
 #image = 'PSP_001576_2460_RED_1000PX//'
 #image = 'PSP_001655_2460_RED_1000PX//'
@@ -49,9 +50,9 @@ areas = ['A','B']
 #areas = ['1','2','3']
 
 #When doing a whole image, pick which FRAC value to use here
-finalfrac = '95'
+finalfrac = '70'
 #specify the total image area, determined from ArcGIS in square meters
-area = 39910395
+manarea = 20732417
 bnm = 'Clean'
 #bnm = "All"
 
@@ -86,18 +87,21 @@ if Auto:
 #ManualResults  
 if Manual:
     Compile = False
-    widcol = 3
-    fgcol = 4
-    areacol = 5
+    #widcol = 3
+    #fgcol = 4
+    #areacol = 5
+    widcol=5
+    fgcol=9
+    areacol = 13
     #PATH = 'C://Users//Don_Hood//Documents//MBARS//ImagePrep//VL2//'
-    #PATH = 'c://Users//Don_Hood//Documents//MBARS//RefData//PSP_007718_2350//'
-    PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_31_35//Manual_Data//'
+    PATH = 'c://Users//Don_Hood//Documents//MBARS//Images//PSP_009086_2360_RED_1000PX//GISFiles//'
+    #PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_31_35//Manual_Data//'
     #PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_01_05_ManualData//'
     paramlist = []
-    paramlist+=[(PATH,'PSP_001484_2455_Manual_A',widcol,fgcol,areacol,resolution)]
-    paramlist+=[(PATH,'PSP_001484_2455_Manual_B',widcol,fgcol,areacol,resolution)]
+    #paramlist+=[(PATH,'PSP_001655_2460_ManualMeasurement_A_Aviv',widcol,fgcol,areacol,resolution)]
+    #paramlist+=[(PATH,'PSP_001655_2460_ManualMeasurement_B_Aviv',widcol,fgcol,areacol,resolution)]
     #paramlist+=[(PATH,'PSP_001481_2410_Manual_C',widcol,fgcol,areacol,resolution)]
-    #paramlist+=[(PATH,'TRA_828_B_Manual_DH',widcol,fgcol,areacol,resolution)]
+    paramlist+=[(PATH,'PSP_009086_2360_RED_MergedResult',widcol,fgcol,areacol,resolution)]
     #paramlist = []
     runfile=''
 
@@ -113,7 +117,7 @@ if WholeImage:
     fpath = '%s%sGISFiles//%s'%(PATH,image,runfile)
     
     fnm = '%s_Clean_boulderdata'%(image[:-2])
-    paramlist+=[(fpath,fnm,widcol,fgcol,areacol,resolution,area)]
+    paramlist+=[(fpath,fnm,widcol,fgcol,areacol,resolution,manarea)]
 #Make a CFA
 def GolomPSDCFA(D,k):
     ''' The Model curves used in Golombek's 2012 work, similar to those used in Li 2018

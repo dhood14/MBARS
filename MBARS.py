@@ -1811,6 +1811,8 @@ def getangles(ID, path = REFPATH):
         pid = dat[5]
         pid = pid.replace(" ","")
         pid = pid.replace('"','')
+        #It seems that if it never finds the ID, it just keeps going
+        #The above code to catch it via the EOF Error is no longer working it seems
         if pid == ID:
             break
     """ key factors we are looking for in the TAB file are as follows:
