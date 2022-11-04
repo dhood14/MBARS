@@ -1,16 +1,7 @@
 import MBARS
 import matplotlib.pyplot as plt
-import scipy.misc as spm
-import numpy as np
-import time
-#import cPickle as pickle
-import pickle
-import matplotlib.patches as patches
 import os
-from numpy import ma as npma
-import skimage.transform as sktrans
-import skimage.util as skutil
-import imageio
+
 '''
 Catch all code to look at results,
 
@@ -19,45 +10,10 @@ this code is potentially defunct. May still have some utility for troubleshootin
 
 '''
 
-try:
-    raw_input = input
-except(NameError):
-    pass
 
 
-
-#filename = 'ESP_018352_1805_RED'
-#filename = 'TRA_000828_2495_RED_300PX'
-
-#filename = 'ESP_028612_1755_RED66_'
-
-
-#filename = 'ESP_011357_2285_RED300PX'
-
-#filename = 'ESP_036437_2290_RED500PX'
-
-#Sholes Images
-#filename = 'PSP_007718_2350_'
-#filename = 'PSP_007718_2350_RED300px'
-#filename = 'PSP_007718_2350_RED16bit500px'
-#runfile='autobound//'
-#runfile='gam600_manbound102//'
-
-#Golombek Comparison Images
-#filename = 'TRA_000828_2495_RED500PX'
-#filename = 'TRA_000828_2495_RED_16bit'
-#filename = 'TRA_000828_2495_RED16bit_500PX'
-#runfile = 'autobound//'
-#runfile = 'gam600_manbound159//'
-#filename = 'PSP_001391_2465_RED500PX'
-#filename = 'PSP_001391_2465_RED16bit500PX'
-#runfile = 'gam600_manbound135//'
-
-#McNaughton Comparison
-#filename = 'PSP_002387_1985_RED16bit_500PX'
-#filename = 'PSP_002387_1985_RED16bit_Dtop_500PX'
-
-filename = 'ESP_018211_2370_RED_1000PX'
+#fnm = 'ESP_073077_2155_RED_1000PX'
+fnm = 'PSP_001556_2460_RED_1000PX'
 #Joes Images
 #filename = 'PSP_007693_2300_RED16bit500PX'
 #runfile = 'gam600_manbound173//'
@@ -66,7 +22,9 @@ filename = 'ESP_018211_2370_RED_1000PX'
 #filename = 'PSP_001415_2470_RED500PX'
 #runfile = 'gam600_manbound85//'
 #filename = 'PSP_001415_2470_RED16bit500PX'
+
 runfile='autobound//'
+
 #filename='PSP_001481_2410_RED16bit_500PX'
 #filename='PSP_001473_2480_RED16bit_500PX'
 #filename='PSP_001430_2470_RED16bit_500PX'
@@ -81,15 +39,15 @@ runfile='autobound//'
 #runfile = 'gam600_manbound147//'
 
 
-MBARS.FNM = filename
-MBARS.PATH = MBARS.BASEPATH+filename+'//'
-root, MBARS.ID, MBARS.NOMAP, panels = MBARS.RunParams(filename)
+MBARS.FNM = fnm
+MBARS.PATH = MBARS.BASEPATH+fnm+'//'
+root, MBARS.ID, MBARS.NOMAP, panels = MBARS.RunParams(fnm)
 MBARS.INANGLE, MBARS.SUNANGLE, MBARS.RESOLUTION, MBARS.NAZ, MBARS.SAZ, MBARS.ROTANG = MBARS.start()
 
 
 #######################PICK THE ANALYSES##################
 ManualMerge = False
-OutToGIS = True
+OutToGIS = False
 MakeCFAs = False
 bigs = False
 imageanalysis = True
@@ -114,23 +72,27 @@ maxdiam = 2
 showblanks = False
 
 
-#check for the proper path:
-if not os.path.exists('%s%s%s'%(MBARS.PATH,MBARS.FNM,runfile)):
+# #check for the proper path:
+if not os.path.exists('%s%s'%(MBARS.PATH,runfile)):
     print ('runfile does not exist for this image, check runfile')
     #exit()
 #where the actual work happens
+
+#Do not know if this works
 if ManualMerge:
     query = 'Did you mean to do a manual Merge?\n y/n?\n'
-    answer = raw_input(query)
+    answer = input(query)
     if answer != 'y':
         print ('OK I wont do it')
     else:
         MBARS.ManualMerge(runfile,MMnum,MMflags)
+        
+#Might work, but also done at the end of each run
 if OutToGIS:
     MBARS.OutToGIS(runfile,'autobound_test//',panels)
 
 if MakeCFAs:
-    record = file('%s%s_record.csv'%(MBARS.PATH,MBARS.FNM),mode='wb')
+    record = open('%s%s_record.csv'%(MBARS.PATH,MBARS.FNM),mode='wb')
     record.write('Filename ,Best Fit Rock Abundance,R^2,Upper limit RA, lower limt RA, maxd=%s\n'%(maxd))
     plt.figure(runfile)
     fit_k,upfit_k,downfit_k, fit_r2 = MBARS.bulkCFA(runfile,panels+1,maxd,2.25,root)
@@ -151,13 +113,13 @@ if bigs:
 if imageanalysis:
     while True:
         query = "Which image do you want to analyze?\n"
-        num = raw_input(query)
+        num = input(query)
         try:
             MBARS.ExamineImage(runfile,num, showblanks)
-        except:
+        except(IOError):
             print ("Failed to examine, image does not exist")
         query = 'Look at another? y/n\n'
-        answer = raw_input(query)
+        answer = input(query)
         if answer != 'y':
             break
 

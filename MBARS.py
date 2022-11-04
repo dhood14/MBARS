@@ -3,12 +3,12 @@ import sys
 sys.path.append('C:\\Python27\\Lib\\site-packages')
 import numpy as np
 import scipy as sp
-import matplotlib as mpl
+#import matplotlib as mpl
 import matplotlib.pyplot as plt
-import scipy.misc as spm
+#import scipy.misc as spm
 from scipy import odr
-from scipy.optimize import curve_fit
-import time
+#from scipy.optimize import curve_fit
+#import time
 #use Cpickle if available
 #import cPickle as pickle
 import pickle
@@ -17,19 +17,19 @@ import matplotlib.patches as patches
 
 import numpy.ma as npma
 import skimage.transform as sktrans
-from math import *
+#import math
 import skimage.feature as skfeat
 import skimage.segmentation as skseg
-import skimage.morphology as skmorph
-import skimage.filters.rank as skrank
-import skimage.restoration as skrestore
-import skimage.util as skutil
+#import skimage.morphology as skmorph
+#import skimage.filters.rank as skrank
+#import skimage.restoration as skrestore
+#import skimage.util as skutil
 import sklearn.cluster as skcluster
-from scipy.ndimage import filters
+#from scipy.ndimage import filters
 import scipy.stats as sps
 import scipy.signal as spsig
 import imageio
-import threading
+#import threading
 
 try:
     raw_input = input
@@ -287,7 +287,13 @@ def boulderdetect_threadsafe(num,image,runfile,odr_keycard):
 def watershedmethod(image):
     #this is the new way of finding the shadows in an image
     #first find the "plateau" value, we will need this for masking
-    plat = sps.mode(image.compressed())
+    try:
+        #for versions of Scipy > 1.9.3
+        plat = sps.mode(image.compressed(),keepdims=True)
+    except(TypeError):
+        #for backwards compatibiltiy to pre-scipy 1.9.3
+        plat = sps.mode(image.compressed())
+        
     #fill the image with a known value in order to preserve the mask
     temp = image.filled(np.max(image)+1)
     #invert the image so the shadows are peaks not lows
@@ -304,6 +310,8 @@ def watershedmethod(image):
     
 
     #dropped the "indices" argument as requiested by the warning, indices is now always "true" so the argument is not needed
+    #A bug is occuring that leads to massive over-splitting. This is certainly due to alot of minima occuring in large, dark areas
+    #
     points = skfeat.peak_local_max(temp,min_distance=mindist,threshold_abs = 2)
 
     #put in a guard against images with no shadows where the entire image is black
@@ -315,8 +323,8 @@ def watershedmethod(image):
     #prepare to convert the points matrix to an image-like array
     #this could perhaps be done with DBSCAN
     #some 0-length arrays are making it to DBSCAN, not sure why...
-    
-    cores,labels = skcluster.dbscan(points,eps=2,min_samples=2)
+    #changed eps to mindist+1, dbscan was excluding things that should have been members of the same cluster
+    cores,labels = skcluster.dbscan(points,eps=mindist+1,min_samples=2)
     
     view = np.zeros_like(image)
     flag = 2
@@ -332,6 +340,7 @@ def watershedmethod(image):
 
     #this will make the mask on view mask out the originally masked points (outside data)
     # as well as the plateau pixels
+    #it is plat[0][0] because of the output of scipy.stats.mode
     temp = npma.masked_equal(image, plat[0][0])
     view.mask = np.logical_or(temp.mask, view.mask)
         
@@ -574,6 +583,7 @@ def overlapcheck_shadbased(num,runfile,odr_keycard):
                 adjacency+=[[aflag,bflag,0]]
                 continue
             #they are not super far away, so we can check adjacency
+            #adjacency here implies 4-neighbor, not 8-neighbor
             D = 0
             for k in abord:
                 for l in bbord:
@@ -658,6 +668,8 @@ def overlapcheck_shadbased(num,runfile,odr_keycard):
                 all_pixels+=rock.pixels
         base_flag = boulds[0].flag
         #identify areas that are way too big, likely shadow-casting topography
+        #the boulder is never passed back to the file, and so it is tossed.
+        
         if len(all_pixels) > 5000:
             #print base_flag
             #print (len(all_pixels))
@@ -678,19 +690,6 @@ def overlapcheck_shadbased(num,runfile,odr_keycard):
             pickle.dump(newbould,shadow_file)
             #report+=['New boulder was better']
      
-        #this is the method where we filter based on connectivity scores, 
-##        else:
-##            #report+=['old boulders were better']
-##            #OK, lets attempt to calculate "connectivity", the sum of adjacency scores:
-##            connectivity = []
-##            for rock in boulds:
-##                connect = sum([a[2] for a in adjacency if a[0] == rock.flag or a[1] == rock.flag])
-##                connectivity+=[connect]
-##            #zip connectivity into the boulds list
-##            boulds = [list(a) for a in zip(boulds,connectivity)]
-##            #print'Entering Recursive Portion'
-##            #print (zip([a[0].flag for a in boulds],connectivity))
-##            exclusive_shadowmerge(boulds,2,shadow_file,odr_keycard)
         #Lets try a k-means based method
         else:
             #print newbould.bouldwid
@@ -700,7 +699,7 @@ def overlapcheck_shadbased(num,runfile,odr_keycard):
     return
     #return clusters,adjacency,report
                 
-                
+#not currently in use      
 def exclusive_shadowmerge(boulds,mincon,shadowfile,odr_keycard):
     ''' Calls the shadowmerge method, recursively tries to make new boulders from adjacent shadows
     '''
@@ -1075,10 +1074,11 @@ class shadow(object):
         self.fiterr = fit_out.sum_square
 
         area = abs(np.pi*self.fitbeta[1]*self.fitbeta[3])
-        if area> MA or self.fitbeta[3]*2 > MD:
+        if area> MA:
             self.fitgood = False
         elif self.fitinfo == "2" or self.fitinfo == "3" or self.fitinfo == "1" or self.fitinfo == '4':
             self.fitgood = True
+        
         return
         #fit_out.pprint()
         
@@ -1480,7 +1480,7 @@ def checkbads(runfile,num):
         patches+=j.patchplot()
     fig=plt.figure(1)
     ax = fig.add_subplot(111)
-    #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH, runfile,FNM, num))
+    image = np.load('%s%s%s%s_rot_masked.npy'%(PATH, runfile,FNM, num))
     
     plt.imshow(image, cmap='binary_r')
     for j in patches:
@@ -1506,22 +1506,33 @@ def ExamineImage(runfile,num, showblanks,filt = True):
             patches1 += dat.patchplot(filt)
             patches2 +=dat.patchplot(filt)
         #image = np.load('%s%s%s%s_rot_masked.npy'%(PATH,runfile,FNM,num))
-        image = imageio.imread('%s%s//%s%s.PNG'%(PATH,FNM,FNM,num))
-        segimage = np.load('%s%s//%s%s%s_SEG.npy'%(PATH,FNM,runfile,FNM,num),allow_pickle=True)
+        image = imageio.imread('%s%s%s.PNG'%(PATH,FNM,num))
+        segimage = np.load('%s%s%s%s_SEG.npy'%(PATH,runfile,FNM,num),allow_pickle=True)
         image = sktrans.rotate(image,ROTANG, resize=True, preserve_range=True)
         #segimage = sktrans.rotate(segimage,ROTANG, resize=True, preserve_range=True)
         image = npma.masked_equal(image, 0)
-        filtimage = np.load('%s%s//%s%s%s_flagged.npy'%(PATH,FNM,runfile,FNM,num),allow_pickle=True)
+        filtimage = np.load('%s%s%s%s_flagged.npy'%(PATH,runfile,FNM,num),allow_pickle=True)
         
         fig,ax = plt.subplots(2,2,sharex = True, sharey = True, figsize=(30,30))
         ax[0][0].imshow(image, cmap='binary_r', interpolation='none')
         ax[0][1].imshow(image,cmap='binary_r',interpolation='none')
         ax[1][0].imshow(segimage,interpolation='none')
         ax[1][1].imshow(filtimage,interpolation='none')
+
         for j in patches1:
             ax[0][1].add_patch(j)
         for j in patches2:
             ax[1][1].add_patch(j)
+
+        plt.show()
+        fig2 = plt.figure(figsize=(30,30))
+        plt.imshow(segimage,interpolation='None')
+        plt.colorbar()
+        plt.show()
+        
+        fig3 = plt.figure(figsize=(30,30))
+        plt.imshow(filtimage, interpolation='None')
+        plt.colorbar()
         plt.show()
 ##        plt.figure(1)
 ##        plt.imshow(image)
@@ -1580,8 +1591,8 @@ def FindBigs(runfile,num,diam = 3):
     return bigs
 def FindExcluded(runfile,maxnum,maxdiam):
     '''finds how many boulders were ignored due to exclusion of large boulders'''
-    total = long(0)
-    used = long(0)
+    total = np.long(0)
+    used = np.long(0)
     for i in range(maxnum):
         shads = []
         load = getshads(runfile,i)
@@ -1806,7 +1817,7 @@ def getangles(ID, path = REFPATH):
             dat = line
         except EOFError:
             print ('No such HiRISE image, check product ID or update CUMINDEX file')
-            return None, None, None
+            return None, None, None,None,None,None
         dat = dat.split(',')
         pid = dat[5]
         pid = pid.replace(" ","")
@@ -1826,7 +1837,11 @@ def getangles(ID, path = REFPATH):
         Resolution (m/px):      39
         Projection_type:        41     
     """
-    
+    #This should resolve one issue
+    if pid!= ID:
+        print ('No such HiRISE image, check product ID or update CUMINDEX file')
+        return None, None, None,None,None,None
+        
     naz = float(dat[25])
     saz = float(dat[26])
     inangle = float(dat[20])
@@ -1882,12 +1897,12 @@ def groundaz(glat, glon, slat, slon):
     """
 
     if (glat >= 0):
-        a=radians(90-slat)
-        b=radians(90-glat)
+        a=np.radians(90-slat)
+        b=np.radians(90-glat)
 
     else:
-        a=radians(90+slat)
-        b=radians(90+glat)
+        a=np.radians(90+slat)
+        b=np.radians(90+glat)
 
     cslon=slon
     cglon=glon
@@ -1916,20 +1931,20 @@ def groundaz(glat, glon, slat, slon):
         else:
             quad=3
 
-    dlon=radians(glon-slon)
+    dlon=np.radians(glon-slon)
     if dlon<0:  dlon=-dlon
     
-    c=acos(cos(a)*cos(b)+sin(a)*sin(b)*cos(dlon))
+    c=np.arccos(np.cos(a)*np.cos(b)+np.sin(a)*np.sin(b)*np.cos(dlon))
     az=0
 
-    if (((sin(b)==0)|(sin(c)==0))|((sin(b)*sin(c))==0)):
+    if (((np.sin(b)==0)|(np.sin(c)==0))|((np.sin(b)*np.sin(c))==0)):
         
         return az
 
     else:
 
         try:
-            bigA=degrees(acos((cos(a)-cos(b)*cos(c))/(sin(b)*sin(c))))
+            bigA=np.degrees(np.arccos((np.cos(a)-np.cos(b)*np.cos(c))/(np.sin(b)*np.sin(c))))
         except:
             return az
 

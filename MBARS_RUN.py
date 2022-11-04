@@ -20,7 +20,7 @@ filenames = []
 #Low-run
 #FRACS = [10,20]
 #standard run
-FRACS = [10,20,30,40,50,60,70,80,85]
+#FRACS = [10,20,30,40,50,60,70,80,85]
 
 #high-Run
 #FRACS = [90,95,100]
@@ -48,16 +48,18 @@ filenames = fnms.split(',')
 
 #filenames+=['ESP_073578_2155_RED_1000PX']
 
-#FRACS = [30-85]
+FRACS = [50]
+#re run at 50 to compare properly
 #filenames+=['ESP_073077_2155_RED_1000PX']
-
+#filenames+=['PSP_001556_2460_RED_1000PX']
+filenames+=['TRA_000828_2495_RED16bit_500PX']
 
 #Y2_01-05
-filenames+=['ESP_018126_2445_RED_1000PX']
-filenames+=['ESP_018158_2435_RED_1000PX']
-filenames+=['ESP_017146_2385_RED_1000PX']
-filenames+=['ESP_011512_2330_RED_1000PX']
-filenames+=['ESP_009664_2305_RED_1000PX']
+#filenames+=['ESP_018126_2445_RED_1000PX']
+#filenames+=['ESP_018158_2435_RED_1000PX']
+#filenames+=['ESP_017146_2385_RED_1000PX']
+#filenames+=['ESP_011512_2330_RED_1000PX']
+#filenames+=['ESP_009664_2305_RED_1000PX']
 
 
 
