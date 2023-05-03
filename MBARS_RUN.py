@@ -20,8 +20,8 @@ filenames = []
 #Low-run
 #FRACS = [10,20]
 #standard run
-FRACS = [10,20,30,40,50,60,70,80,85]
-
+#FRACS = [10,20,30,40,50,60,70,80,85]
+FRACS = [60,70,80,85]
 #high-Run
 #FRACS = [90,95,100]
 #FRACS = [100]
@@ -51,19 +51,10 @@ filenames = fnms.split(',')
 #filenames+=['ESP_073077_2155_RED_1000PX']
 
 
-#Y2_01-05
-filenames+=['ESP_018126_2445_RED_1000PX']
-filenames+=['ESP_018158_2435_RED_1000PX']
-filenames+=['ESP_017146_2385_RED_1000PX']
-filenames+=['ESP_011512_2330_RED_1000PX']
-filenames+=['ESP_009664_2305_RED_1000PX']
+#BB
+#bb-01
+filenames+=['PSP_010644_2455_RED_1000PX']
 
-#Y1_31-35
-#filenames+=['PSP_001668_2460_RED_1000PX']
-#filenames+=['PSP_001669_2460_RED_1000PX']
-#filenames+=['PSP_001576_2460_RED_1000PX']
-#filenames+=['PSP_001655_2460_RED_1000PX']
-#filenames+=['PSP_001484_2455_RED_1000PX']
 
 ######SOME CONTROLS###################
 #produce intermediate plots, False unless you are debugging something
