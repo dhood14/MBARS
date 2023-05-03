@@ -23,7 +23,7 @@ ext = '.txt'
 #ext = '.csv'
 
 #set wether using the auto or manual runs
-Auto = 0
+Auto =0
 Manual = 1
 WholeImage = 0
 
@@ -32,7 +32,7 @@ WholeImage = 0
 #The above setting will send the program to BASEPATH//filename//GISFiles// to look for the output data
 
 #Auto Settings & WholeImage Settings
-image = 'PSP_001738_2345_RED_1000PX//'
+#image = 'PSP_001738_2345_RED_1000PX//'
 #Y31-35
 #image = 'PSP_001668_2460_RED_1000PX//'
 #image = 'PSP_001669_2460_RED_1000PX//'
@@ -40,19 +40,38 @@ image = 'PSP_001738_2345_RED_1000PX//'
 #image = 'PSP_001655_2460_RED_1000PX//'
 #image = 'PSP_001484_2455_RED_1000PX//'
 
-#Specify the percentiles (FRAC Values) (suffix on the autobound_## file) and test area names
-fracs = ['10','20','30','40','50','60','70','80','85']
-#fracs = ['90','95','100']
+#Y2_01_05
+#image = 'ESP_018126_2445_RED_1000PX//'
+#image = 'ESP_018158_2435_RED_1000PX//'
+#image = 'ESP_017146_2385_RED_1000PX//'
+#image = 'ESP_011512_2330_RED_1000PX//'
+#image = 'PSP_009664_2305_RED_1000PX//'
 
+#Y2_11_15
+#image = 'PSP_001946_2485_RED_1000PX//'
+#image = 'PSP_001497_2480_RED_1000PX//'
+#image = 'PSP_001591_2475_RED_1000PX//'
+#image = 'PSP_001448_2470_RED_1000PX//'
+#image = 'PSP_001477_2470_RED_1000PX//'
+
+image = 'PSP_010644_2455_RED_1000PX//'
+
+#Specify the percentiles (FRAC Values) (suffix on the autobound_## file) and test area names
+#fracs = ['10','20','30','40','50','60','70','80','85']
+#fracs = ['90','95','100']
+fracs = ['10','20','30','40','50','60','70']
+#Note: The code made it to this point and crashed for other reasons, but DID NOT require a console restart
+#The problem may be in a specific part of MBARS that is called somewhere below this point
 #areas = ['A','B','C','D']
 #areas = ['A','B','C']
 areas = ['A','B']
 #areas = ['1','2','3']
 
 #When doing a whole image, pick which FRAC value to use here
-finalfrac = '70'
+finalfrac = '85'
+#finalfrac = 'Merge'
 #specify the total image area, determined from ArcGIS in square meters
-manarea = 20732417
+manarea = 139905673.25
 bnm = 'Clean'
 #bnm = "All"
 
@@ -87,21 +106,24 @@ if Auto:
 #ManualResults  
 if Manual:
     Compile = False
-    #widcol = 3
-    #fgcol = 4
-    #areacol = 5
-    widcol=5
-    fgcol=9
-    areacol = 13
+    widcol = 3
+    fgcol = 4
+    areacol = 5
+    #widcol=5
+    #fgcol=9
+    #areacol = 13
     #PATH = 'C://Users//Don_Hood//Documents//MBARS//ImagePrep//VL2//'
-    PATH = 'c://Users//Don_Hood//Documents//MBARS//Images//PSP_009086_2360_RED_1000PX//GISFiles//'
-    #PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_31_35//Manual_Data//'
-    #PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y1_01_05_ManualData//'
+    #PATH = 'C://Users//Don_Hood//Documents//MBARS//Images//ESP_017146_2385_RED_1000PX//GISFiles//'
+    PATH = 'C://Users//Don_Hood//Documents//MDAP_2020_Polygons//BAndBImages//'
+    ext = '.txt'
+    #PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y2_11_15//ManualAreas//'
+    #PATH = 'c://Users//Don_Hood//Documents//MDAP_2020_Polygons//Image_APRX_Files//Y2_01_05//Y2_01_05//ManualAreas//'
     paramlist = []
-    #paramlist+=[(PATH,'PSP_001655_2460_ManualMeasurement_A_Aviv',widcol,fgcol,areacol,resolution)]
-    #paramlist+=[(PATH,'PSP_001655_2460_ManualMeasurement_B_Aviv',widcol,fgcol,areacol,resolution)]
-    #paramlist+=[(PATH,'PSP_001481_2410_Manual_C',widcol,fgcol,areacol,resolution)]
-    paramlist+=[(PATH,'PSP_009086_2360_RED_MergedResult',widcol,fgcol,areacol,resolution)]
+    paramlist+=[(PATH,'BB_01_Manual_A',widcol,fgcol,areacol,resolution)]
+    paramlist+=[(PATH,'BB_01_Manual_B',widcol,fgcol,areacol,resolution)]
+    #paramlist+=[(PATH,'Y2_03_Manual_C',widcol,fgcol,areacol,resolution)]
+    #paramlist+=[(PATH,'Y2_03_Manual_D',widcol,fgcol,areacol,resolution)]
+    #paramlist+=[(PATH,'ESP_017146_2385_RED_1000PX_Clean_Merged',widcol,fgcol,areacol,resolution)]
     #paramlist = []
     runfile=''
 
