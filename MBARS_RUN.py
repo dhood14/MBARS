@@ -48,7 +48,7 @@ filenames = fnms.split(',')
 
 #filenames+=['ESP_073578_2155_RED_1000PX']
 
-FRACS = [50]
+FRACS = [30,40]
 #re run at 50 to compare properly
 #filenames+=['ESP_073077_2155_RED_1000PX']
 #filenames+=['PSP_001556_2460_RED_1000PX']
